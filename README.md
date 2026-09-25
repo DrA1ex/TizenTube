@@ -1,4 +1,7 @@
 # ▶️ TizenTube
+
+> **GX1/VOT fork:** This fork supplies the JavaScript source for [TizenTubeCobalt_VOT](https://github.com/DrA1ex/TizenTubeCobalt_VOT). See the [GX1/VOT source variant](docs/GX1-VOT.md) for its scope.
+
 <p align="center">
     <img width="600px" src=".github/assets/TizenTube Standalone Banner.png">
     <br>

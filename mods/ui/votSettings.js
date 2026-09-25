@@ -16,14 +16,14 @@ export function votSettings() {
     const languages = Object.keys(LANGUAGE_NAMES).map(code => [code, languageName(code)]);
     return group(audioText('Audio preferences', 'Предпочтения аудио'), 'preferences', [
         group(audioText('Automatic selection', 'Автовыбор'), 'automatic', [
-            { name: audioText('Select track automatically', 'Автовыбор дорожки'), value: 'audioAutoStart',
+            { name: audioText('Auto-select track', 'Автовыбор дорожки'), value: 'audioAutoStart',
                 subtitle: audioText('Apply rules when a video starts.', 'Применять правила при запуске видео.') },
-            { name: audioText('Translate another language', 'Перевод другого языка'), value: 'audioAutoDifferentLanguage',
-                subtitle: audioText('When the original is not in the selected language.', 'Когда оригинал не на выбранном языке.') },
+            { name: audioText('Translate other audio', 'Перевод другого языка'), value: 'audioAutoDifferentLanguage',
+                subtitle: audioText('When the original language differs.', 'Когда оригинал не на выбранном языке.') },
             { name: audioText('Language detection', 'Определение языка'), value: 'audioDetectUnknownLanguage',
                 subtitle: audioText('For videos without language metadata.', 'Для видео без языковых данных.') },
-            { name: audioText('Translate without detection', 'Перевод без определения'), value: 'audioAutoUnknownLanguage',
-                subtitle: audioText('Even if Yandex could not detect the language.', 'Даже если Яндекс не определил язык.') }
+            { name: audioText('Translate unknown audio', 'Перевод без определения'), value: 'audioAutoUnknownLanguage',
+                subtitle: audioText('Even when Yandex cannot detect it.', 'Даже если Яндекс не определил язык.') }
         ]),
         radio(audioText('Translation provider', 'Источник перевода'), 'audioPreferredProvider', [
             ['youtube', 'YouTube'], ['standard', audioText('Yandex · standard', 'Яндекс · обычный')], ['lively', audioText('Yandex · expressive voices', 'Яндекс · живые голоса')]]),

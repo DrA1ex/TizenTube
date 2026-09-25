@@ -111,7 +111,7 @@ export function patchResolveCommand() {
                         // Some TV clients use a speaker icon, not AUDIO_TRACK; match the observed title too.
                         const unifiedAudioItems = unifyPlayerAudioEntry(items,
                             buttonItem(
-                                { title: audioText('Audio and translation', 'Аудио и перевод') },
+                                { title: audioText('audioAndTranslation') },
                                 { icon: 'VOLUME_UP', secondaryIcon: 'CHEVRON_RIGHT' }, [
                                 {
                                     customAction: {

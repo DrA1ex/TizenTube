@@ -18,7 +18,7 @@ export async function probeVotLanguage(client, videoData, targetLang) {
     const path = provider.paths.videoTranslation;
     const headers = await getSecYaHeaders('Vtrans', session, body, path);
     const response = await provider.request(path, body, headers);
-    if (!response.success) throw new Error(audioText('Yandex did not respond to the language detection request', 'Яндекс не ответил на запрос определения языка'));
+    if (!response.success) throw new Error(audioText('yandexDidNotRespondToThe'));
     const result = YandexVOTProtobuf.decodeTranslationResponse(response.data);
     return languageCode(result.language) || hint;
 }

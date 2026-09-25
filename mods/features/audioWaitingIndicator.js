@@ -7,14 +7,14 @@ export function waitingIndicatorMessage(flow) {
     const waiting = flow.videoId && ['youtube', 'standard', 'lively', 'detect'].includes(provider)
         && ['detecting', 'preparing', 'waiting', 'retrying'].includes(flow.status);
     if (!waiting) return null;
-    const title = flow.status === 'retrying' ? audioText('Yandex: retrying the network request…', 'Яндекс: повторяем сетевой запрос…')
-        : provider === 'detect' ? audioText('Yandex: detecting the original language…', 'Яндекс: определяем язык оригинала…')
-        : provider === 'youtube' ? audioText('YouTube: waiting for a track…', 'YouTube: ждём дорожку…')
-        : provider === 'lively' ? audioText('Yandex: waiting for expressive voices…', 'Яндекс: ждём живые голоса…')
-        : audioText('Yandex: waiting for translation…', 'Яндекс: ждём перевод…');
+    const title = flow.status === 'retrying' ? audioText('yandexRetryingTheNetworkRequest')
+        : provider === 'detect' ? audioText('yandexDetectingTheOriginalLanguage')
+        : provider === 'youtube' ? audioText('youtubeWaitingForATrack')
+        : provider === 'lively' ? audioText('yandexWaitingForExpressiveVoices')
+        : audioText('yandexWaitingForTranslation');
     const language = !['youtube', 'detect'].includes(provider) && !flow.sourceLanguage
-        ? audioText('\nThe original language will be detected automatically.', '\nЯзык оригинала определится автоматически.') : '';
-    return title + language + audioText('\nPlayback continues. Cancel in Audio and translation.', '\nПросмотр продолжается. Отмена — в «Аудио и перевод».');
+        ? audioText('originalLanguageDetectionNote') : '';
+    return title + language + audioText('playbackContinuesNote');
 }
 
 export function updateAudioWaitingIndicator(flow) {

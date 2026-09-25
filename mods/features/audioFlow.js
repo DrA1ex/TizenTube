@@ -26,7 +26,7 @@ export const audioFlow = new AudioFlowController({
     prepare: prepareVotTrack, detectLanguage: detectVotLanguage, activate: activateVotTrack, stop: stopVot,
     playbackState: () => getVotState().state,
     hasToken: () => getVotState().hasOAuthToken,
-    notify: message => showToast(audioText('Audio and translation', 'Аудио и перевод'), message)
+    notify: message => showToast(audioText('audioAndTranslation'), message)
 });
 let ticking = false;
 let authResume = null;

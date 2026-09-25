@@ -1,3 +1,5 @@
+import { AUDIO_TRANSLATIONS } from './audioTranslations.js';
+
 // YouTube's language setting takes precedence over the device locale. All other
 // languages use English, including unknown or unavailable locale settings.
 export function isRussianAudioLocale() {
@@ -5,4 +7,8 @@ export function isRussianAudioLocale() {
     return /^ru(?:[-_]|$)/i.test(String(locale));
 }
 
-export const audioText = (english, russian) => isRussianAudioLocale() ? russian : english;
+export function audioText(key) {
+    const entry = AUDIO_TRANSLATIONS[key];
+    if (!entry) throw new Error('Unknown audio translation key: ' + key);
+    return isRussianAudioLocale() ? entry.ru : entry.en;
+}

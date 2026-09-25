@@ -103,7 +103,7 @@ JSON.parse = function () {
         );
         if (!hasVotEntry) {
             guideSection.items.push(GuideEntryRenderer(
-                audioText('Audio and translation', 'Аудио и перевод'),
+                audioText('audioAndTranslation'),
                 {
                     customAction: {
                         action: 'TT_VOT_SETTINGS_SHOW'

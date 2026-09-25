@@ -17,7 +17,7 @@ export async function requestTranslationCycle(entries, request, valid, pollDelay
         if (!valid()) break;
         try {
             const result = await client.translateVideo(request);
-            if (!valid()) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
+            if (!valid()) throw new Error(audioText('trackSelectionCancelled'));
             attempts.push({ transport, status: result?.status, translated: Boolean(result?.translated),
                 partial: result?.status === 5, remaining: result?.remainingTime });
             if (result?.translated && result.url && result.status !== 5)

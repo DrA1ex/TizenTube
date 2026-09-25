@@ -1,3 +1,4 @@
+import { audioText } from '../features/audioLocale.js';
 import VOTClient from '@vot.js/ext';
 import { VOTWorkerProvider } from '@vot.js/core/providers/votworker';
 import { configRead, configWrite, configChangeEmitter } from '../config.js';
@@ -131,7 +132,7 @@ async function requestBodyBytes(body) {
 }
 
 async function nativeFetch(url, options = {}) {
-    if (options.signal?.aborted) throw new Error('Выбор дорожки отменён');
+    if (options.signal?.aborted) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
     const bridge = getNativeBridge();
     if (!bridge && !localBridgeAvailable) throw new Error('Native VOT bridge is unavailable');
 
@@ -246,14 +247,14 @@ function makeClient(transport, lively, signal) {
     const fetchOpts = { timeout: 15000 };
     const native = hasNativeTransport();
     const fetchFn = signal ? async (url, options = {}) => {
-        if (signal.aborted) throw new Error('Выбор дорожки отменён');
+        if (signal.aborted) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
         const controller = new AbortController();
         const abort = () => controller.abort();
         signal.addEventListener('abort', abort, { once: true });
         const timer = setTimeout(abort, native ? 65000 : 15000);
         try {
             const response = await (native ? nativeFetch : fetch)(url, { ...options, signal: controller.signal });
-            if (signal.aborted) throw new Error('Выбор дорожки отменён');
+            if (signal.aborted) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
             return response;
         } finally {
             clearTimeout(timer);
@@ -363,7 +364,7 @@ async function requestTranslation(currentVideo, videoId, requestGeneration) {
 
         // Strict lively mode must never silently fall back to a standard voice.
         if (configRead('votVoiceMode') === 'lively') break;
-        if (lively) toast('Закадровый перевод', 'Живой голос недоступен. В режиме «Авто» пробуем обычный.');
+        if (lively) toast(audioText('Voice-over translation', 'Закадровый перевод'), audioText('Expressive voice is unavailable. Trying standard translation in Auto mode.', 'Живой голос недоступен. В режиме «Авто» пробуем обычный.'));
     }
 
     throw error || new Error('Translation failed');
@@ -423,7 +424,7 @@ function syncPlayback(force = false) {
         nativeCommand('sync', desired).then(status => {
             if (requestGeneration !== generation) return;
             if (status?.state === 'error' || status?.ok === false) {
-                failPlayback(new Error(status.error || 'Ошибка воспроизведения перевода'));
+                failPlayback(new Error(status.error || audioText('Translation playback error', 'Ошибка воспроизведения перевода')));
             }
         }).catch(error => {
             if (requestGeneration === generation) failPlayback(error);
@@ -449,12 +450,12 @@ function syncPlayback(force = false) {
 }
 
 function failPlayback(error) {
-    lastNativeError = error.message || 'Не удалось воспроизвести перевод';
+    lastNativeError = error.message || audioText('Could not play the translation', 'Не удалось воспроизвести перевод');
     blockedAutoId = activeVideoId;
     stopVot();
     state = 'error';
     lastError = new Error(lastNativeError);
-    toast('Закадровый перевод', lastNativeError);
+    toast(audioText('Voice-over translation', 'Закадровый перевод'), lastNativeError);
 }
 
 function onVideoEvent(event) {
@@ -497,7 +498,7 @@ function createTranslationAudio(url) {
     created.id = 'tizentube-vot-audio';
     created.src = url;
     created.addEventListener('error', () => {
-        if (audio === created) failPlayback(new Error('Аудиодорожка недоступна'));
+        if (audio === created) failPlayback(new Error(audioText('Audio track is unavailable', 'Аудиодорожка недоступна')));
     });
     document.body.appendChild(created);
 }
@@ -531,23 +532,23 @@ export function stopVot(showMessage = false) {
     stopAudioOnly();
     state = 'idle';
     activeVoice = null;
-    if (showMessage) toast('Закадровый перевод', 'Перевод выключен для этого видео');
+    if (showMessage) toast(audioText('Voice-over translation', 'Закадровый перевод'), audioText('Translation is off for this video', 'Перевод выключен для этого видео'));
 }
 
 export async function toggleVot(automatic = false) {
     if (state === 'loading' || state === 'playing') { if (!automatic) stopVot(true); return; }
     if (!configRead('enableVOT')) {
-        if (!automatic) toast('Закадровый перевод', 'Включите перевод в настройках VOT');
+        if (!automatic) toast(audioText('Voice-over translation', 'Закадровый перевод'), audioText('Enable translation in VOT settings', 'Включите перевод в настройках VOT'));
         return;
     }
     const currentVideo = getPlayerVideo();
     const videoId = getCurrentVideoId();
     if (!currentVideo || !videoId || !currentVideo.isConnected || document.hidden) {
-        if (!automatic) toast('Закадровый перевод', 'Сначала откройте видео');
+        if (!automatic) toast(audioText('Voice-over translation', 'Закадровый перевод'), audioText('Open a video first', 'Сначала откройте видео'));
         return;
     }
     if (!Number.isFinite(currentVideo.duration) || playerElement()?.getPlayerResponse?.()?.videoDetails?.isLive) {
-        if (!automatic) toast('Закадровый перевод', 'Дождитесь загрузки записи. Прямые эфиры пока не поддерживаются.');
+        if (!automatic) toast(audioText('Voice-over translation', 'Закадровый перевод'), audioText('Wait for the video to load. Live streams are not supported yet.', 'Дождитесь загрузки записи. Прямые эфиры пока не поддерживаются.'));
         return;
     }
     const requestGeneration = ++generation;
@@ -555,27 +556,27 @@ export async function toggleVot(automatic = false) {
     state = 'loading';
     lastError = null;
     bindVideo(currentVideo, videoId);
-    toast('Закадровый перевод', 'Готовим перевод…');
+    toast(audioText('Voice-over translation', 'Закадровый перевод'), audioText('Preparing translation…', 'Готовим перевод…'));
     try {
         await detectLocalBridge();
         // One-time migration from development builds; never echo the token.
         const legacyToken = String(configRead('votOAuthToken') || '').trim();
         if (localBridgeAvailable && legacyToken) {
             const saved = await nativeCommand('authSet', { token: legacyToken });
-            if (!saved?.ok) throw new Error('Не удалось сохранить токен в Android');
+            if (!saved?.ok) throw new Error(audioText('Could not save the token in Android', 'Не удалось сохранить токен в Android'));
             configWrite('votOAuthToken', '');
             await detectLocalBridge();
         }
         if (requestGeneration !== generation) return;
         if (!currentIsValid()) { stopVot(); return; }
         if (configRead('votVoiceMode') === 'lively' && !getToken()) {
-            throw new Error('Для живого голоса добавьте токен: VOT → Авторизация Яндекса');
+            throw new Error(audioText('For expressive voices, add a token: VOT → Yandex sign-in', 'Для живого голоса добавьте токен: VOT → Авторизация Яндекса'));
         }
         const result = await requestTranslation(currentVideo, videoId, requestGeneration);
         if (requestGeneration !== generation) return;
         if (!currentIsValid()) { stopVot(); return; }
         translatedUrl = result.url;
-        activeVoice = result.lively ? 'Живой' : 'Обычный';
+        activeVoice = result.lively ? audioText('Expressive', 'Живой') : audioText('Standard', 'Обычный');
         nativeAudioActive = hasNativeTransport();
         originalVolume = video.volume;
         if (!nativeAudioActive) {
@@ -583,10 +584,10 @@ export async function toggleVot(automatic = false) {
         }
         state = 'playing';
         applyVolumes();
-        toast('Закадровый перевод', activeVoice + ' голос включён');
+        toast(audioText('Voice-over translation', 'Закадровый перевод'), activeVoice + audioText(' voice enabled', ' голос включён'));
     } catch (error) {
         if (requestGeneration !== generation) return;
-        const message = String(error?.message || 'Не удалось получить перевод').replace(/OAuth\s+\S+/gi, 'OAuth [скрыто]');
+        const message = String(error?.message || audioText('Could not get the translation', 'Не удалось получить перевод')).replace(/OAuth\s+\S+/gi, audioText('OAuth [redacted]', 'OAuth [скрыто]'));
         failPlayback(new Error(message));
     }
 }
@@ -596,10 +597,10 @@ export async function setOAuthToken() {
     await detectLocalBridge();
     if (hasNativeTransport()) {
         const result = await nativeCommand('authDialog');
-        if (!result?.ok) toast('Авторизация Яндекса', 'Не удалось открыть окно ввода');
+        if (!result?.ok) toast(audioText('Yandex sign-in', 'Авторизация Яндекса'), audioText('Could not open the token dialog', 'Не удалось открыть окно ввода'));
         return;
     }
-    toast('Авторизация Яндекса', 'Ввод токена доступен во встроенной Android-сборке');
+    toast(audioText('Yandex sign-in', 'Авторизация Яндекса'), audioText('Token entry is available in the integrated Android build', 'Ввод токена доступен во встроенной Android-сборке'));
 }
 
 export async function clearOAuthToken() {
@@ -607,22 +608,22 @@ export async function clearOAuthToken() {
     if (hasNativeTransport()) await nativeCommand('authClear');
     configWrite('votOAuthToken', '');
     await detectLocalBridge();
-    toast('Авторизация Яндекса', 'Токен удалён');
+    toast(audioText('Yandex sign-in', 'Авторизация Яндекса'), audioText('Token removed', 'Токен удалён'));
 }
 
 export function setWorkerHost() {
-    toast('Закадровый перевод', 'В Android-сборке адреса сервисов настроены автоматически');
+    toast(audioText('Voice-over translation', 'Закадровый перевод'), audioText('Service addresses are configured automatically in the Android build', 'В Android-сборке адреса сервисов настроены автоматически'));
 }
 
 export function showVotStatus() {
     const description = getVotState();
-    toast('Закадровый перевод', description.summary + (lastError ? ' · ' + lastError.message : ''));
+    toast(audioText('Voice-over translation', 'Закадровый перевод'), description.summary + (lastError ? ' · ' + lastError.message : ''));
 }
 
 export function getVotState() {
-    const names = { idle: 'Выключен', loading: 'Подготовка перевода…', playing: video?.paused ? 'На паузе' : 'Перевод включён', error: 'Ошибка' };
+    const names = { idle: audioText('Off', 'Выключен'), loading: audioText('Preparing translation…', 'Подготовка перевода…'), playing: video?.paused ? audioText('Paused', 'На паузе') : audioText('Translation enabled', 'Перевод включён'), error: audioText('Error', 'Ошибка') };
     return { state, activeVideoId, hasOAuthToken: Boolean(getToken()), foreground: nativeForeground, lastError,
-        summary: names[state] + (activeVoice ? ' · ' + activeVoice + ' голос' : '') };
+        summary: names[state] + (activeVoice ? ' · ' + activeVoice + audioText(' voice', ' голос') : '') };
 }
 
 export async function refreshVotAuthorization() {
@@ -638,14 +639,14 @@ export async function refreshVotAuthorization() {
 export async function loginYandex() {
     stopVot();
     await detectLocalBridge();
-    if (!hasNativeTransport()) throw new Error('Вход доступен во встроенной Android-сборке');
+    if (!hasNativeTransport()) throw new Error(audioText('Sign-in is available in the integrated Android build', 'Вход доступен во встроенной Android-сборке'));
     const result = await nativeCommand('authLogin');
-    if (!result?.ok) throw new Error('Не удалось открыть страницу входа');
+    if (!result?.ok) throw new Error(audioText('Could not open the sign-in page', 'Не удалось открыть страницу входа'));
 }
 
 function waitForTranslation(ms, signal) {
     return new Promise((resolve, reject) => {
-        const abort = () => { clearTimeout(timer); reject(new Error('Выбор дорожки отменён')); };
+        const abort = () => { clearTimeout(timer); reject(new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'))); };
         const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
         if (signal?.aborted) abort();
         else signal?.addEventListener('abort', abort, { once: true });
@@ -656,7 +657,7 @@ function waitForTranslation(ms, signal) {
 export async function prepareVotTrack({ lively, sourceLang, targetLang, videoId, media, signal, onStatus = () => {} }) {
     await refreshVotAuthorization();
     if (lively && !getToken()) {
-        const error = new Error('Войдите в Яндекс для живых голосов');
+        const error = new Error(audioText('Sign in to Yandex for expressive voices', 'Войдите в Яндекс для живых голосов'));
         error.code = 'AUTH_REQUIRED';
         throw error;
     }
@@ -671,17 +672,17 @@ export async function prepareVotTrack({ lively, sourceLang, targetLang, videoId,
         if (cycle.ready) {
             return { ...cycle.ready.result, lively, transport: cycle.ready.transport, videoId, targetLang };
         }
-        if (!valid()) throw new Error('Выбор дорожки отменён');
+        if (!valid()) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
         const authFailure = lively && cycle.failures.find(({ transport, error }) => transport === 'direct'
             && /auth required|unauthori[sz]ed|OAuth|401|403/i.test(String(error?.data?.data || error?.message || '')));
         if (authFailure) {
-            const authError = new Error('Яндекс отклонил авторизацию. Войдите заново.');
+            const authError = new Error(audioText('Yandex rejected authorization. Sign in again.', 'Яндекс отклонил авторизацию. Войдите заново.'));
             authError.code = 'AUTH_REQUIRED';
             throw authError;
         }
         if (!cycle.received) {
             onStatus({ state: 'retrying', attempts: cycle.attempts });
-            const error = new Error('Не удалось связаться с сервисом перевода. Проверьте сеть и повторите запрос.');
+            const error = new Error(audioText('Could not reach the translation service. Check your connection and retry.', 'Не удалось связаться с сервисом перевода. Проверьте сеть и повторите запрос.'));
             error.cause = cycle.failures[cycle.failures.length - 1]?.error;
             throw error;
         }
@@ -689,8 +690,8 @@ export async function prepareVotTrack({ lively, sourceLang, targetLang, videoId,
             attempts: cycle.attempts });
         await waitForTranslation(cycle.delay * 1000, signal);
     }
-    if (!valid()) throw new Error('Выбор дорожки отменён');
-    throw new Error('Перевод пока недоступен. Можно повторить ожидание.');
+    if (!valid()) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
+    throw new Error(audioText('Translation is not available yet. You can wait again.', 'Перевод пока недоступен. Можно повторить ожидание.'));
 }
 
 export async function detectVotLanguage({ targetLang, videoId, media, signal }) {
@@ -698,28 +699,28 @@ export async function detectVotLanguage({ targetLang, videoId, media, signal }) 
     const videoData = getVideoData(media, videoId);
     let lastError;
     for (const transport of getTransportAttempts(false)) {
-        if (signal?.aborted || getCurrentVideoId() !== videoId) throw new Error('Определение языка отменено');
+        if (signal?.aborted || getCurrentVideoId() !== videoId) throw new Error(audioText('Language detection cancelled', 'Определение языка отменено'));
         try {
             const client = makeClient(transport, false, signal);
             const language = await probeVotLanguage(client, videoData, targetLang);
-            if (signal?.aborted || getCurrentVideoId() !== videoId) throw new Error('Определение языка отменено');
+            if (signal?.aborted || getCurrentVideoId() !== videoId) throw new Error(audioText('Language detection cancelled', 'Определение языка отменено'));
             return language;
         } catch (error) {
             lastError = error;
             if (signal?.aborted || getCurrentVideoId() !== videoId) throw error;
         }
     }
-    throw lastError || new Error('Язык определить не удалось');
+    throw lastError || new Error(audioText('Could not detect the language', 'Язык определить не удалось'));
 }
 
 export function activateVotTrack(result) {
-    if (getCurrentVideoId() !== result.videoId) throw new Error('Видео уже сменилось');
+    if (getCurrentVideoId() !== result.videoId) throw new Error(audioText('The video has changed', 'Видео уже сменилось'));
     const media = getPlayerVideo();
-    if (!media || document.hidden) throw new Error('Плеер неактивен');
+    if (!media || document.hidden) throw new Error(audioText('The player is inactive', 'Плеер неактивен'));
     stopVot();
     bindVideo(media, result.videoId);
     translatedUrl = result.url;
-    activeVoice = result.lively ? 'Живой' : 'Обычный';
+    activeVoice = result.lively ? audioText('Expressive', 'Живой') : audioText('Standard', 'Обычный');
     nativeAudioActive = hasNativeTransport();
     originalVolume = media.volume;
     if (!nativeAudioActive) {

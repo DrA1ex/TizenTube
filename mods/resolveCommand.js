@@ -1,3 +1,4 @@
+import { audioText } from './features/audioLocale.js';
 import { configWrite, configRead } from './config.js';
 import { enablePip } from './features/pictureInPicture.js';
 import modernUI, { optionShow } from './ui/settings.js';
@@ -110,7 +111,7 @@ export function patchResolveCommand() {
                         // Some TV clients use a speaker icon, not AUDIO_TRACK; match the observed title too.
                         const unifiedAudioItems = unifyPlayerAudioEntry(items,
                             buttonItem(
-                                { title: 'Аудио и перевод' },
+                                { title: audioText('Audio and translation', 'Аудио и перевод') },
                                 { icon: 'VOLUME_UP', secondaryIcon: 'CHEVRON_RIGHT' }, [
                                 {
                                     customAction: {

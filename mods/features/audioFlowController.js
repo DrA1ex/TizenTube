@@ -1,3 +1,4 @@
+import { audioText } from '../features/audioLocale.js';
 import { supportsTranslation } from './audioTracks.js';
 
 // One video, one requested choice, one audible choice. Global preferences are read-only here.
@@ -96,7 +97,7 @@ export class AudioFlowController {
                 this.audible = null;
                 if (this.status === 'playing') {
                     this.status = 'error';
-                    this.error = 'Не удалось воспроизвести перевод. Выберите дорожку повторно.';
+                    this.error = audioText('Could not play the translation. Select the track again.', 'Не удалось воспроизвести перевод. Выберите дорожку повторно.');
                 }
                 return;
             }
@@ -142,12 +143,12 @@ export class AudioFlowController {
             this.requested = null;
             this.status = 'idle';
             if (prefs.translateUnknown) await this.select({ provider: prefs.provider }, true);
-            else this.error = 'Язык определить не удалось — автоматический перевод не запущен';
+            else this.error = audioText('Could not detect the language, so automatic translation did not start', 'Язык определить не удалось — автоматический перевод не запущен');
         }
     }
     async select(choice, automatic = false) {
         const id = this.d.videoId();
-        if (!id) { this.d.notify('Сначала откройте видео'); return; }
+        if (!id) { this.d.notify(audioText('Open a video first', 'Сначала откройте видео')); return; }
         if (id !== this.id) { this.leave(); this.id = id; }
         this.cancelPending();
         this.abort = new AbortController();
@@ -169,14 +170,14 @@ export class AudioFlowController {
         if (choice.provider === 'youtube') {
             const track = this.d.inventory().tracks.find(x => x.language === this.target);
             if (track) await this.apply({ ...choice, trackId: track.id }, revision);
-            else { this.status = 'waiting'; this.waited = true; this.d.notify('Ждём дорожку YouTube. Просмотр продолжается.'); }
+            else { this.status = 'waiting'; this.waited = true; this.d.notify(audioText('Waiting for the YouTube track. Playback continues.', 'Ждём дорожку YouTube. Просмотр продолжается.')); }
             return;
         }
         if (!['standard', 'lively'].includes(choice.provider)) return;
         const source = choice.sourceLang || this.d.inventory().originalLanguage;
         this.sourceLanguage = source;
         if (!['ru', 'en', 'kk'].includes(this.target) || (source && !supportsTranslation(source, this.target))) {
-            this.status = 'error'; this.error = 'Эта пара языков пока не поддерживается Яндексом'; return;
+            this.status = 'error'; this.error = audioText('Yandex does not support this language pair yet', 'Эта пара языков пока не поддерживается Яндексом'); return;
         }
         const cacheKey = choice.provider + ':' + this.target;
         if (this.cache.has(cacheKey)) { await this.apply(this.cache.get(cacheKey), revision); return; }
@@ -225,7 +226,7 @@ export class AudioFlowController {
         this.ready = track;
         if (this.waited && this.d.preferences().readyBehavior === 'notify') {
             this.status = 'ready';
-            this.d.notify('Нужная дорожка готова. «Аудио и перевод» → «Включить готовую дорожку».');
+            this.d.notify(audioText('The requested track is ready. Audio and translation → Play ready track.', 'Нужная дорожка готова. «Аудио и перевод» → «Включить готовую дорожку».'));
         } else await this.apply(track, revision);
     }
     async applyReady() {

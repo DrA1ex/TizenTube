@@ -1,3 +1,4 @@
+import { audioText } from '../features/audioLocale.js';
 import { configRead, configWrite, configChangeEmitter } from '../config.js';
 import { AudioFlowController } from './audioFlowController.js';
 import { audioInventory, selectYouTubeTrack, ensureOriginal } from './audioTracks.js';
@@ -25,7 +26,7 @@ export const audioFlow = new AudioFlowController({
     prepare: prepareVotTrack, detectLanguage: detectVotLanguage, activate: activateVotTrack, stop: stopVot,
     playbackState: () => getVotState().state,
     hasToken: () => getVotState().hasOAuthToken,
-    notify: message => showToast('Аудио и перевод', message)
+    notify: message => showToast(audioText('Audio and translation', 'Аудио и перевод'), message)
 });
 let ticking = false;
 let authResume = null;

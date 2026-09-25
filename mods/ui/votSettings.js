@@ -1,5 +1,6 @@
+import { audioText } from '../features/audioLocale.js';
 import { configRead } from '../config.js';
-import { LANGUAGE_NAMES } from '../features/audioTracks.js';
+import { LANGUAGE_NAMES, languageName } from '../features/audioTracks.js';
 const radio = (name, key, values) => ({ name, icon: 'AUDIO_TRACK', value: null, menuId: 'tt-audio-' + key,
     menuHeader: { title: name }, options: values.map(([value, name]) => ({ name, key, value })) });
 const group = (name, id, options) => ({ name, icon: 'AUDIO_TRACK', value: null, menuId: 'tt-audio-' + id,
@@ -7,38 +8,38 @@ const group = (name, id, options) => ({ name, icon: 'AUDIO_TRACK', value: null, 
 export function audioVolumeSettings() {
     const volume = (name, key) => radio(name + ' · ' + Math.round(Number(configRead(key)) * 100) + '%', key,
         Array.from({ length: 11 }, (_, i) => [String(i / 10), i * 10 + '%']));
-    return group('Громкость', 'volumes', [
-        volume('Перевод', 'votTranslationVolume'), volume('Оригинал под переводом', 'votOriginalVolume')
+    return group(audioText('Volume', 'Громкость'), 'volumes', [
+        volume(audioText('Translation', 'Перевод'), 'votTranslationVolume'), volume(audioText('Original under translation', 'Оригинал под переводом'), 'votOriginalVolume')
     ]);
 }
 export function votSettings() {
-    const languages = Object.entries(LANGUAGE_NAMES);
-    return group('Предпочтения аудио', 'preferences', [
-        group('Автовыбор', 'automatic', [
-            { name: 'Автовыбор дорожки', value: 'audioAutoStart',
-                subtitle: 'Применять правила при запуске видео.' },
-            { name: 'Перевод другого языка', value: 'audioAutoDifferentLanguage',
-                subtitle: 'Когда оригинал не на выбранном языке.' },
-            { name: 'Определение языка', value: 'audioDetectUnknownLanguage',
-                subtitle: 'Для видео без языковых данных.' },
-            { name: 'Перевод без определения', value: 'audioAutoUnknownLanguage',
-                subtitle: 'Даже если Яндекс не определил язык.' }
+    const languages = Object.keys(LANGUAGE_NAMES).map(code => [code, languageName(code)]);
+    return group(audioText('Audio preferences', 'Предпочтения аудио'), 'preferences', [
+        group(audioText('Automatic selection', 'Автовыбор'), 'automatic', [
+            { name: audioText('Select track automatically', 'Автовыбор дорожки'), value: 'audioAutoStart',
+                subtitle: audioText('Apply rules when a video starts.', 'Применять правила при запуске видео.') },
+            { name: audioText('Translate another language', 'Перевод другого языка'), value: 'audioAutoDifferentLanguage',
+                subtitle: audioText('When the original is not in the selected language.', 'Когда оригинал не на выбранном языке.') },
+            { name: audioText('Language detection', 'Определение языка'), value: 'audioDetectUnknownLanguage',
+                subtitle: audioText('For videos without language metadata.', 'Для видео без языковых данных.') },
+            { name: audioText('Translate without detection', 'Перевод без определения'), value: 'audioAutoUnknownLanguage',
+                subtitle: audioText('Even if Yandex could not detect the language.', 'Даже если Яндекс не определил язык.') }
         ]),
-        radio('Источник перевода', 'audioPreferredProvider', [
-            ['youtube', 'YouTube'], ['standard', 'Яндекс · обычный'], ['lively', 'Яндекс · живые голоса']]),
-        group('Языки', 'languages', [
-            radio('Язык перевода', 'audioTargetLanguage', languages.map(([key, name]) =>
-                [key, name + (['ru', 'en', 'kk'].includes(key) ? '' : ' · только YouTube')])),
-            { name: 'Языки YouTube', value: null, menuId: 'tt-audio-visible-languages',
-                menuHeader: { title: 'Языки дорожек YouTube' }, arrayToEdit: 'audioVisibleLanguages',
+        radio(audioText('Translation provider', 'Источник перевода'), 'audioPreferredProvider', [
+            ['youtube', 'YouTube'], ['standard', audioText('Yandex · standard', 'Яндекс · обычный')], ['lively', audioText('Yandex · expressive voices', 'Яндекс · живые голоса')]]),
+        group(audioText('Languages', 'Языки'), 'languages', [
+            radio(audioText('Translation language', 'Язык перевода'), 'audioTargetLanguage', languages.map(([key, name]) =>
+                [key, name + (['ru', 'en', 'kk'].includes(key) ? '' : audioText(' · YouTube only', ' · только YouTube'))])),
+            { name: audioText('YouTube languages', 'Языки YouTube'), value: null, menuId: 'tt-audio-visible-languages',
+                menuHeader: { title: audioText('YouTube track languages', 'Языки дорожек YouTube') }, arrayToEdit: 'audioVisibleLanguages',
                 options: languages.map(([value, name]) => ({ name, value })) }
         ]),
-        group('Ожидание перевода', 'wait-policy', [
-            radio('Когда дорожка готова', 'audioReadyBehavior', [
-                ['switch', 'Переключиться автоматически'], ['notify', 'Только уведомить']]),
-            radio('Пока перевод готовится', 'audioWaitingTrack', [
-                ['current', 'Слушать текущую дорожку'], ['original', 'Слушать оригинал'],
-                ['standard', 'Обычный Яндекс до готовности']])
+        group(audioText('Waiting for translation', 'Ожидание перевода'), 'wait-policy', [
+            radio(audioText('When the track is ready', 'Когда дорожка готова'), 'audioReadyBehavior', [
+                ['switch', audioText('Switch automatically', 'Переключиться автоматически')], ['notify', audioText('Notify only', 'Только уведомить')]]),
+            radio(audioText('While translation is being prepared', 'Пока перевод готовится'), 'audioWaitingTrack', [
+                ['current', audioText('Listen to the current track', 'Слушать текущую дорожку')], ['original', audioText('Listen to the original', 'Слушать оригинал')],
+                ['standard', audioText('Use standard Yandex until ready', 'Обычный Яндекс до готовности')]])
         ])
     ]);
 }

@@ -1,3 +1,4 @@
+import { audioText } from '../features/audioLocale.js';
 import { languageCode, sourceLanguage } from './votPlayback.js';
 
 const AUDIO_TRACK_BUILD = 'v7.11';
@@ -24,7 +25,12 @@ export const LANGUAGE_NAMES = { ru: 'Русский', en: 'Английский'
 // Verified against upstream LANG_SUPPORT.md (2026-09-13). Availability of a voice is decided by the API.
 export const YANDEX_TARGETS = ['ru', 'en', 'kk'];
 export const YANDEX_SOURCES = ['ru', 'en', 'zh', 'ko', 'lt', 'lv', 'ar', 'fr', 'it', 'es', 'de', 'ja'];
-export const languageName = code => LANGUAGE_NAMES[code] || code || 'Язык не указан';
+const LANGUAGE_NAMES_EN = { ru: 'Russian', en: 'English', kk: 'Kazakh', de: 'German', fr: 'French',
+    es: 'Spanish', it: 'Italian', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', ar: 'Arabic',
+    lt: 'Lithuanian', lv: 'Latvian', uk: 'Ukrainian', pt: 'Portuguese', tr: 'Turkish', hi: 'Hindi' };
+export const languageName = code => code && LANGUAGE_NAMES[code]
+    ? audioText(LANGUAGE_NAMES_EN[code], LANGUAGE_NAMES[code])
+    : code || audioText('Language not specified', 'Язык не указан');
 export const supportsTranslation = (source, target) => source !== target && YANDEX_SOURCES.includes(source) && YANDEX_TARGETS.includes(target);
 export const getAudioPlayer = () => document.querySelector('.html5-video-player');
 const text = value => typeof value === 'string' ? value : value?.simpleText || value?.runs?.map(x => x.text).join('') || '';
@@ -123,31 +129,31 @@ export function filteredYouTubeTracks(inventory, languages) {
 export async function selectYouTubeTrack(id, { isCurrent = () => true, delay = ms => new Promise(r => setTimeout(r, ms)) } = {}) {
     let inventory = audioInventory();
     const track = inventory.tracks.find(x => x.id === id);
-    if (!track) throw new Error('Эта дорожка больше недоступна');
+    if (!track) throw new Error(audioText('This track is no longer available', 'Эта дорожка больше недоступна'));
     if (inventory.selected?.id === id) return;
-    if (!inventory.canSelect) throw new Error('YouTube не предоставил управление аудиодорожками');
-    if (!isCurrent()) throw new Error('Выбор дорожки отменён');
+    if (!inventory.canSelect) throw new Error(audioText('YouTube did not provide audio track controls', 'YouTube не предоставил управление аудиодорожками'));
+    if (!isCurrent()) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
     // Resolve afresh immediately before switching. Passing adaptiveFormats.audioTrack
     // makes the TV loader fail to resolve its ID and dereference null.reason.
     const available = inventory.player.getAvailableAudioTracks?.() || [];
     const descriptor = available.find(raw => String(raw?.id) === id);
-    if (!descriptor) throw new Error('YouTube пока не предоставил эту дорожку для переключения');
+    if (!descriptor) throw new Error(audioText('YouTube has not made this track available for switching yet', 'YouTube пока не предоставил эту дорожку для переключения'));
     await inventory.player.setAudioTrack(descriptor);
     for (let i = 0; i < 30; i++) {
-        if (!isCurrent()) throw new Error('Выбор дорожки отменён');
+        if (!isCurrent()) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
         inventory = audioInventory();
         if (inventory.selected?.id === id) return;
         await delay(100);
     }
-    throw new Error('YouTube не подтвердил переключение дорожки');
+    throw new Error(audioText('YouTube did not confirm the track switch', 'YouTube не подтвердил переключение дорожки'));
 }
 
 export async function ensureOriginal(options) {
     const inventory = audioInventory();
-    if (options?.isCurrent && !options.isCurrent()) throw new Error('Выбор дорожки отменён');
+    if (options?.isCurrent && !options.isCurrent()) throw new Error(audioText('Track selection cancelled', 'Выбор дорожки отменён'));
     recordOriginalDecision(inventory, inventory.keepCurrentAudio ? 'keep-current' : inventory.original ? 'switch-original' : 'reject-unknown-original');
     if (inventory.keepCurrentAudio) return;
     if (inventory.original) return selectYouTubeTrack(inventory.original.id, options);
     if (!inventory.tracks.length && inventory.originalLanguage) return;
-    throw new Error('YouTube пока не сообщил, какая дорожка оригинальная [AT-74]');
+    throw new Error(audioText('YouTube has not identified the original track yet [AT-74]', 'YouTube пока не сообщил, какая дорожка оригинальная [AT-74]'));
 }

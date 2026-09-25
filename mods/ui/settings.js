@@ -1,3 +1,4 @@
+import { audioText } from '../features/audioLocale.js';
 import { configRead } from '../config.js';
 import { votSettings } from './votSettings.js';
 import { audioMenuPage } from './audioMenuPaging.js';
@@ -1036,14 +1037,14 @@ export function optionShow(parameters, update) {
 
     if (parameters.menuId?.startsWith('tt-audio') && buttons.length > 5) {
         const page = audioMenuPage(buttons, parameters.selectedIndex || 0);
-        for (const [offset, label] of [[-1, '← Предыдущая страница'], [1, 'Следующая страница →']]) {
+        for (const [offset, label] of [[-1, audioText('← Previous page', '← Предыдущая страница')], [1, audioText('Next page →', 'Следующая страница →')]]) {
             const next = page.page + offset;
             if (next < 0 || next >= page.pageCount) continue;
             page.items.push(buttonItem({ title: label }, { icon: 'CHEVRON_RIGHT' }, [{ customAction: {
                 action: 'OPTIONS_SHOW', parameters: { ...parameters, selectedIndex: next * 3, update: true }
             } }]));
         }
-        const header = parameters.menuHeader || { title: 'Аудио и перевод' };
+        const header = parameters.menuHeader || { title: audioText('Audio and translation', 'Аудио и перевод') };
         showModal({ ...header, subtitle: (header.subtitle || '') + ' · ' + (page.page + 1) + '/' + page.pageCount },
             overlayPanelItemListRenderer(page.items, page.selectedIndex), parameters.menuId, update);
         return;

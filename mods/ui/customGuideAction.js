@@ -1,3 +1,4 @@
+import { audioText } from '../features/audioLocale.js';
 import { configChangeEmitter, configRead, configWrite } from "../config.js";
 import getCommandExecutor from "./customCommandExecution.js";
 import { GuideEntryRenderer } from "./ytUI.js";
@@ -102,7 +103,7 @@ JSON.parse = function () {
         );
         if (!hasVotEntry) {
             guideSection.items.push(GuideEntryRenderer(
-                'Аудио и перевод',
+                audioText('Audio and translation', 'Аудио и перевод'),
                 {
                     customAction: {
                         action: 'TT_VOT_SETTINGS_SHOW'

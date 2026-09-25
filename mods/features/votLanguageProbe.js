@@ -1,3 +1,4 @@
+import { audioText } from '../features/audioLocale.js';
 import { YandexVOTProtobuf } from '@vot.js/core/protobuf';
 import { config as votConfig } from '@vot.js/shared';
 import { getSecYaHeaders } from '@vot.js/shared/secure';
@@ -17,7 +18,7 @@ export async function probeVotLanguage(client, videoData, targetLang) {
     const path = provider.paths.videoTranslation;
     const headers = await getSecYaHeaders('Vtrans', session, body, path);
     const response = await provider.request(path, body, headers);
-    if (!response.success) throw new Error('Яндекс не ответил на запрос определения языка');
+    if (!response.success) throw new Error(audioText('Yandex did not respond to the language detection request', 'Яндекс не ответил на запрос определения языка'));
     const result = YandexVOTProtobuf.decodeTranslationResponse(response.data);
     return languageCode(result.language) || hint;
 }

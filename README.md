@@ -1,6 +1,15 @@
 # ▶️ TizenTube
 
-> **GX1/VOT fork:** This fork supplies the JavaScript source for [TizenTubeCobalt_VOT](https://github.com/DrA1ex/TizenTubeCobalt_VOT). See the [GX1/VOT source variant](docs/GX1-VOT.md) for its scope.
+## What this fork adds
+
+This fork develops the TizenTube JavaScript used by [TizenTubeCobalt_VOT](https://github.com/DrA1ex/TizenTubeCobalt_VOT) on RockTek GX1 / Android TV:
+
+- An **Audio and translation** player menu for original audio, available YouTube tracks, standard Yandex translation, and live voices, with per-video choices and saved preferences.
+- Yandex VOT requests, translation readiness and cancellation, optional automatic track selection, and account sign-in through the Android bridge.
+- Playback speed, format, and quality controls tuned for GX1, including recovery after sustained buffering and restoration of the user's preferred quality.
+- Startup and audio synchronization handling for the embedded Cobalt player.
+
+The Android bridge, pinned Cobalt APK input, build instructions, and APK packaging live in the [builder repository](https://github.com/DrA1ex/TizenTubeCobalt_VOT). This fork contains the JavaScript source that builder pins as a submodule. See [GX1/VOT source details](docs/GX1-VOT.md). The current Android build has passed local checks; playback on GX1 still needs device verification.
 
 <p align="center">
     <img width="600px" src=".github/assets/TizenTube Standalone Banner.png">

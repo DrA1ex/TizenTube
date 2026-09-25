@@ -8,6 +8,10 @@ import { t } from 'i18next';
 import { requestNextAndNavigateChannel } from './utils/innerTubeCalls.js';
 import qrcode from 'qrcode-npm';
 import showGuideSettings from './ui/sidebarModification.js';
+import { toggleVot, setOAuthToken, clearOAuthToken, setWorkerHost, showVotStatus } from './features/vot.js';
+import { showAudioMenu, audioMenuAction } from './ui/audioMenu.js';
+import { unifyPlayerAudioEntry } from './ui/playerAudioEntry.js';
+import { applyPlaybackSpeed } from './features/playbackSpeed.js';
 
 export default function resolveCommand(cmd, _) {
     // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
@@ -31,11 +35,17 @@ export function findFunction(funcName) {
 // Patch resolveCommand to be able to change TizenTube settings
 
 export function patchResolveCommand() {
+    if (!window._yttv) return false;
+
     for (const key in window._yttv) {
         if (window._yttv[key] && window._yttv[key].instance && window._yttv[key].instance.resolveCommand) {
 
+            if (window._yttv[key].instance.resolveCommand.__tizenTubePatched) {
+                return true;
+            }
+
             const ogResolve = window._yttv[key].instance.resolveCommand;
-            window._yttv[key].instance.resolveCommand = function (cmd, _) {
+            const patchedResolve = function (cmd, _) {
                 if (cmd.setClientSettingEndpoint) {
                     // Command to change client settings. Use TizenTube configuration to change settings.
                     for (const settings of cmd.setClientSettingEndpoint.settingDatas) {
@@ -94,6 +104,22 @@ export function patchResolveCommand() {
                                 }
                             };
                         }
+                    }
+
+                    if (configRead('audioUnifiedFlow')) {
+                        // Some TV clients use a speaker icon, not AUDIO_TRACK; match the observed title too.
+                        const unifiedAudioItems = unifyPlayerAudioEntry(items,
+                            buttonItem(
+                                { title: 'Аудио и перевод' },
+                                { icon: 'VOLUME_UP', secondaryIcon: 'CHEVRON_RIGHT' }, [
+                                {
+                                    customAction: {
+                                        action: 'TT_VOT_SETTINGS_SHOW'
+                                    }
+                                }
+                            ])
+                        );
+                        items.splice(0, items.length, ...unifiedAudioItems);
                     }
 
                     cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(2, 0,
@@ -190,8 +216,13 @@ export function patchResolveCommand() {
 
                 return ogResolve.call(this, cmd, _);
             }
+            patchedResolve.__tizenTubePatched = true;
+            window._yttv[key].instance.resolveCommand = patchedResolve;
+            return true;
         }
     }
+
+    return false;
 }
 
 function customAction(action, parameters) {
@@ -214,8 +245,31 @@ function customAction(action, parameters) {
         case 'TT_SETTINGS_SHOW':
             modernUI();
             break;
+        case 'TT_VOT_SETTINGS_SHOW':
+            showAudioMenu();
+            break;
+        case 'AUDIO_CHOOSE': case 'AUDIO_READY': case 'AUDIO_CANCEL': case 'AUDIO_TARGET':
+        case 'AUDIO_PREFERENCES': case 'AUDIO_LANGUAGE': case 'AUDIO_LOGIN': case 'AUDIO_TOKEN':
+        case 'AUDIO_LOGOUT': case 'AUDIO_REFRESH': case 'AUDIO_MENU': case 'AUDIO_VOLUMES':
+            audioMenuAction(action, parameters);
+            break;
         case 'TT_SPEED_SETTINGS_SHOW':
             speedSettings();
+            break;
+        case 'VOT_TOGGLE':
+            toggleVot();
+            break;
+        case 'VOT_SET_OAUTH':
+            setOAuthToken();
+            break;
+        case 'VOT_CLEAR_OAUTH':
+            clearOAuthToken();
+            break;
+        case 'VOT_SET_WORKER':
+            setWorkerHost();
+            break;
+        case 'VOT_STATUS':
+            showVotStatus();
             break;
         case 'UPDATE_REMIND_LATER':
             configWrite('dontCheckUpdateUntil', parameters);
@@ -225,8 +279,7 @@ function customAction(action, parameters) {
             showToast(t('settings.options.updater.downloading.title'), t('settings.options.updater.downloading.subtitle'));
             break;
         case 'SET_PLAYER_SPEED':
-            const speed = Number(parameters);
-            document.querySelector('video').playbackRate = speed;
+            applyPlaybackSpeed(parameters);
             break;
         case 'ENTER_MP':
             enablePip();

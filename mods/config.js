@@ -50,13 +50,15 @@ const defaultConfig = {
   dimmingOpacity: 0.5,
   enablePaidPromotionOverlay: true,
   speedSettingsIncrement: 0.25,
-  videoPreferredCodec: 'any',
+  // GX1 decodes VP9 Profile 2 in hardware at 4K60. Prefer the mature path;
+  // users can still select Auto/AV1 explicitly in player settings.
+  preferredVideoCodec: 'vp9',
   launchToOnStartup: null,
   reloadHomeOnStartup: true,
   disabledSidebarContents: [],
   sidebarContentsOrder: [],
   disableChannelsOnSidebar: false,
-  enableUpdater: true,
+  enableUpdater: false,
   autoFrameRate: false,
   autoFrameRatePauseVideoFor: 0,
   enableSigninReminder: false,
@@ -68,6 +70,25 @@ const defaultConfig = {
   disableEnlargingThumbnails: false,
   enableShrinkingThumbnails: false,
   hideRelatedVideosPlayer: false,
+  enableVOT: true,
+  votAutoEnglish: false,
+    audioUnifiedFlow: true,
+    audioPreferencesMigrated: false,
+  audioAutoStart: false,
+  audioAutoDifferentLanguage: true,
+  audioDetectUnknownLanguage: true,
+  audioAutoUnknownLanguage: false,
+  audioPreferredProvider: 'lively',
+  audioTargetLanguage: 'ru',
+  audioVisibleLanguages: ['ru', 'en'],
+  audioReadyBehavior: 'switch',
+  audioWaitingTrack: 'current',
+  votVoiceMode: 'auto',
+  votTransport: 'auto',
+  votWorkerHost: 'vot-worker.eu.cc',
+  votOAuthToken: '',
+  votTranslationVolume: '1',
+  votOriginalVolume: '0.2',
 };
 
 let localConfig;
@@ -89,7 +110,7 @@ export function configRead(key) {
 }
 
 export function configWrite(key, value) {
-  console.info('Setting key', key, 'to', value);
+  console.info('Setting key', key, 'to', key === 'votOAuthToken' ? '[redacted]' : value);
   localConfig[key] = value;
   window.localStorage[CONFIG_KEY] = JSON.stringify(localConfig);
   configChangeEmitter.dispatchEvent(new CustomEvent('configChange', { detail: { key, value } }));

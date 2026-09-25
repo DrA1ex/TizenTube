@@ -9,13 +9,19 @@ import resolveCommand, { patchResolveCommand } from '../resolveCommand.js';
 import { pipToFullscreen } from '../features/pictureInPicture.js';
 import getCommandExecutor from './customCommandExecution.js';
 import { t } from 'i18next';
+import { startupCommand } from '../features/startupPolicy.js';
+
+// Commands must be patched on the home screen too. Waiting for a video made
+// TizenTube/VOT guide actions inert until the first playback started.
+const commandPatchInterval = setInterval(() => {
+  if (patchResolveCommand()) clearInterval(commandPatchInterval);
+}, 250);
 
 // It just works, okay?
 const interval = setInterval(() => {
   const videoElement = document.querySelector('video');
   if (videoElement) {
     execute_once_dom_loaded();
-    patchResolveCommand();
     clearInterval(interval);
   }
 }, 250);
@@ -228,17 +234,10 @@ function execute_once_dom_loaded() {
     }, 2000);
   }
 
-  if (configRead('reloadHomeOnStartup')) {
-    if (configRead('launchToOnStartup')) {
-      resolveCommand(JSON.parse(configRead('launchToOnStartup')));
-    } else {
-      resolveCommand({
-        signalAction: {
-          signal: 'SOFT_RELOAD_PAGE'
-        }
-      });
-    }
-  }
+  const startup = startupCommand({ enabled: configRead('reloadHomeOnStartup'),
+    destination: configRead('launchToOnStartup'), embedded: Boolean(window.__votBridgeKey),
+    href: window.location.href });
+  if (startup) resolveCommand(startup);
 
   const commandExecutor = getCommandExecutor();
   if (commandExecutor) {

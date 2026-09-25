@@ -1,6 +1,7 @@
 import { configChangeEmitter, configRead, configWrite } from "../config.js";
 import getCommandExecutor from "./customCommandExecution.js";
 import { GuideEntryRenderer } from "./ytUI.js";
+import { t } from "i18next";
 
 const origParse = JSON.parse;
 JSON.parse = function () {
@@ -90,6 +91,25 @@ JSON.parse = function () {
                     j--;
                 }
             }
+        }
+    }
+
+    // Keep VOT directly reachable with a TV remote even when YouTube changes
+    // the structure of its settings page.
+    if (guideSection) {
+        const hasVotEntry = guideSection.items.some(item =>
+            item.guideEntryRenderer?.navigationEndpoint?.customAction?.action === 'TT_VOT_SETTINGS_SHOW'
+        );
+        if (!hasVotEntry) {
+            guideSection.items.push(GuideEntryRenderer(
+                'Аудио и перевод',
+                {
+                    customAction: {
+                        action: 'TT_VOT_SETTINGS_SHOW'
+                    }
+                },
+                'SUBTITLES'
+            ));
         }
     }
 

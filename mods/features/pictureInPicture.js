@@ -190,7 +190,15 @@ const observerPipEnter = new MutationObserver(() => {
     }
 });
 
-observerPipEnter.observe(document.body, { childList: true, subtree: true });
+function startPipObserver() {
+    if (!document.body) {
+        setTimeout(startPipObserver, 50);
+        return;
+    }
+    observerPipEnter.observe(document.body, { childList: true, subtree: true });
+}
+
+startPipObserver();
 
 export {
     enablePip,

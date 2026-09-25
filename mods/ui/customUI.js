@@ -123,6 +123,8 @@ function applyPatches() {
             }
         }
 
+        // Audio has one player entry: playback settings. Do not add a duplicate transport button.
+
         if (!configRead('enableSuperThanksButton')) {
             const origEngagementActionButton = inst[engagementActionButton];
             inst[engagementActionButton] = function () {

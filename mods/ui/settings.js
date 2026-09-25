@@ -1,4 +1,6 @@
 import { configRead } from '../config.js';
+import { votSettings } from './votSettings.js';
+import { audioMenuPage } from './audioMenuPaging.js';
 import { showModal, buttonItem, overlayPanelItemListRenderer, scrollPaneRenderer, overlayMessageRenderer, QrCodeRenderer } from './ytUI.js';
 import qrcode from 'qrcode-npm';
 import { t } from 'i18next';
@@ -92,6 +94,7 @@ export default function modernUI(update, parameters) {
             icon: 'DOLLAR_SIGN',
             value: 'enableAdBlock'
         },
+        votSettings(),
         {
             name: t('settings.options.sponsorblock.title'),
             icon: 'MONEY_HAND',
@@ -793,6 +796,17 @@ export default function modernUI(update, parameters) {
             } : null
     ];
 
+    if (parameters?.votOnly) {
+        const setting = settings.find(item => item?.menuId === 'tt-audio-preferences');
+        return optionShow({
+            options: setting.options,
+            selectedIndex: 0,
+            update: false,
+            menuId: setting.menuId,
+            menuHeader: setting.menuHeader
+        }, update);
+    }
+
     const buttons = [];
 
     let index = 0;
@@ -1020,5 +1034,19 @@ export function optionShow(parameters, update) {
         }
     }
 
+    if (parameters.menuId?.startsWith('tt-audio') && buttons.length > 5) {
+        const page = audioMenuPage(buttons, parameters.selectedIndex || 0);
+        for (const [offset, label] of [[-1, '← Предыдущая страница'], [1, 'Следующая страница →']]) {
+            const next = page.page + offset;
+            if (next < 0 || next >= page.pageCount) continue;
+            page.items.push(buttonItem({ title: label }, { icon: 'CHEVRON_RIGHT' }, [{ customAction: {
+                action: 'OPTIONS_SHOW', parameters: { ...parameters, selectedIndex: next * 3, update: true }
+            } }]));
+        }
+        const header = parameters.menuHeader || { title: 'Аудио и перевод' };
+        showModal({ ...header, subtitle: (header.subtitle || '') + ' · ' + (page.page + 1) + '/' + page.pageCount },
+            overlayPanelItemListRenderer(page.items, page.selectedIndex), parameters.menuId, update);
+        return;
+    }
     showModal(parameters.menuHeader ? parameters.menuHeader : t('settings.ttSettings.title'), overlayPanelItemListRenderer(buttons, parameters.selectedIndex), parameters.menuId || 'tt-settings-options', update);
 }

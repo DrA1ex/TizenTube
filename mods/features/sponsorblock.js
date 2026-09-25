@@ -106,13 +106,19 @@ class SponsorBlockHandler {
     this.manualSkippableCategories = configRead('sponsorBlockManualSkips');
     this.skippableCategories = this.getSkippableCategories();
 
-    this.scheduleSkipHandler = () => {
-      const slider = document.querySelector('div[idomkey="slider"]');
-      const sliderRect = slider?.getBoundingClientRect();
-      const isOldUI = !document.querySelector('div[idomkey="Metadata-Section"]');
-      if (isOldUI && sliderRect) {
-        this.segmentsoverlay.style.setProperty('top', `${sliderRect.top}px`, 'important');
+    this.scheduleSkipHandler = (event) => {
+      // timeupdate fires several times per second. Layout is stable during
+      // playback, so only read geometry on state changes and reuse an already
+      // scheduled segment timeout.
+      if (event?.type !== 'timeupdate') {
+        const slider = document.querySelector('div[idomkey="slider"]');
+        const sliderRect = slider?.getBoundingClientRect();
+        const isOldUI = !document.querySelector('div[idomkey="Metadata-Section"]');
+        if (isOldUI && sliderRect && this.segmentsoverlay) {
+          this.segmentsoverlay.style.setProperty('top', `${sliderRect.top}px`, 'important');
+        }
       }
+      if (event?.type === 'timeupdate' && this.nextSkipTimeout) return;
       this.scheduleSkip();
     }
     this.durationChangeHandler = () => this.buildOverlay();
@@ -293,6 +299,7 @@ class SponsorBlockHandler {
     );
 
     this.nextSkipTimeout = setTimeout(() => {
+      this.nextSkipTimeout = null;
       if (this.video.paused) {
         console.info(this.videoID, 'Currently paused, ignoring...');
         return;

@@ -22,9 +22,12 @@
     "rollup": "^3.26.2",
     "rollup-plugin-string": "^3.0.0",
     "tiny-sha256": "^1.0.2",
-    "whatwg-fetch": "^3.6.2"
+    "whatwg-fetch": "^3.6.2",
+    "@vot.js/core": "3.0.3",
+    "@vot.js/ext": "3.0.3"
   },
   "devDependencies": {
+    "@babel/core": "^7.28.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",

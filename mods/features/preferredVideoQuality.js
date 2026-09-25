@@ -1,4 +1,6 @@
 import { configRead, configChangeEmitter } from "../config.js";
+import { determineQuality } from './preferredQualityPolicy.js';
+import { applyPreferredQuality } from './playbackQualityGuard.js';
 
 const SELECTORS = {
     PLAYER: '.html5-video-player',
@@ -65,36 +67,29 @@ class PreferredQualityHandler {
 
         const isShorts = Object.values(this.#player.getVideoStats()).find(a => a && a === 'shortspage');
         if (state?.isPlaying && !this.#hasAppliedQuality && !isShorts) {
-            this.#applyQuality();
-            this.#hasAppliedQuality = true;
+            this.#hasAppliedQuality = this.#applyQuality();
         }
     };
 
     #applyQuality() {
         const preferredQuality = configRead(CONFIG_KEYS.QUALITY);
-        if (!preferredQuality || preferredQuality === 'auto' || !this.#player) return;
+        if (!preferredQuality || preferredQuality === 'auto' || !this.#player) return false;
 
         try {
             const quality = this.#determineQuality(preferredQuality);
 
             if (quality) {
-              this.#player.setPlaybackQualityRange(quality, quality)
+                applyPreferredQuality(this.#player, quality);
+                return true;
             }
         } catch (e) {
             console.warn('[PreferredQuality] Failed to apply quality:', e);
         }
+        return false;
     }
 
     #determineQuality(preference) {
-        const availableQualities = this.#player.getAvailableQualityData();
-        if (!availableQualities?.length) return 'highres';
-
-        const getQualityValue = (label) => parseInt(label, 10) || 0;
-        const targetValue = getQualityValue(preference);
-
-        const match = availableQualities.find(q => getQualityValue(q.qualityLabel) === targetValue);
-
-        return match ? match.quality : 'highres';
+        return determineQuality(preference, this.#player.getAvailableQualityData());
     }
 }
 

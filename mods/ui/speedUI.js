@@ -1,20 +1,12 @@
 import { configRead } from '../config.js';
+import { installPlaybackSpeed } from '../features/playbackSpeed.js';
 import { showModal, buttonItem, overlayPanelItemListRenderer } from './ytUI.js';
 import { t } from 'i18next';
 
-const interval = setInterval(() => {
-    const videoElement = document.querySelector('video');
-    if (videoElement) {
-        execute_once_dom_loaded_speed();
-        clearInterval(interval);
-    }
-}, 1000);
+installPlaybackSpeed(document, () => configRead('videoSpeed'));
+execute_once_dom_loaded_speed();
 
 function execute_once_dom_loaded_speed() {
-    document.querySelector('video').addEventListener('canplay', () => {
-        document.getElementsByTagName('video')[0].playbackRate = configRead('videoSpeed');;
-    });
-
     const eventHandler = (evt) => {
         if (evt.keyCode == 406 || evt.keyCode == 191) {
             evt.preventDefault();

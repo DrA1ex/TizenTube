@@ -9,7 +9,7 @@ This fork develops the TizenTube JavaScript used by [TizenTubeCobalt_VOT](https:
 - Playback speed, format, and quality controls tuned for GX1, including recovery after sustained buffering and restoration of the user's preferred quality.
 - Startup and audio synchronization handling for the embedded Cobalt player.
 
-The Android bridge, pinned Cobalt APK input, build instructions, and APK packaging live in the [builder repository](https://github.com/DrA1ex/TizenTubeCobalt_VOT). This fork contains the JavaScript source that builder pins as a submodule. See [GX1/VOT source details](docs/GX1-VOT.md). The current Android build has passed local checks; playback on GX1 still needs device verification.
+The Android bridge, pinned Cobalt APK input, build instructions, and APK packaging live in the [builder repository](https://github.com/DrA1ex/TizenTubeCobalt_VOT). This fork contains the JavaScript source that builder pins as a submodule. See [GX1/VOT source details](docs/GX1-VOT.md).
 
 <p align="center">
     <img width="600px" src=".github/assets/TizenTube Standalone Banner.png">

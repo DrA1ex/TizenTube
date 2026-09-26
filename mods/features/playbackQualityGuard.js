@@ -145,6 +145,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
 
         const formats = playbackFormats(response?.streamingData?.adaptiveFormats);
         const currentFormat = currentPlaybackFormat(player, formats);
+        const currentQuality = player.getPlaybackQuality?.();
         let needsRecovery = false;
         const playing = !video.paused && !video.ended && !video.seeking;
         const ahead = bufferedAhead(video);
@@ -188,10 +189,16 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             sample.frames = frames;
         }
 
-        // A locked format can starve even when the decoder is healthy. Only
-        // react to an empty buffer after playback has previously advanced.
+        // A locked format can starve even when the decoder is healthy. Require
+        // prior progress, or evidence that the initial cap has not taken effect.
         const starving = playing && video.readyState < 3 && ahead < speed;
-        state.networkSince = starving && state.hasProgress ? (state.networkSince ?? now) : null;
+        // A failed initial quality switch can exhaust the buffer before the
+        // first progress sample. The old, heavier stream is then still active.
+        const currentHeight = candidates.find(item => item.quality === (currentFormat?.quality || currentQuality))?.height;
+        const capHeight = candidates.find(item => item.quality === state.cap)?.height;
+        const failedCap = speed > 1.01 && capHeight && currentHeight > capHeight;
+        state.networkSince = starving && (state.hasProgress || failedCap)
+            ? (state.networkSince ?? now) : null;
         if (starving && state.networkSince !== null && now - state.networkSince >= NETWORK_STALL_MS
             && now >= (state.cooldownUntil || 0)) needsRecovery = true;
 
@@ -209,7 +216,6 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             if (!needsRecovery) return;
         }
 
-        const currentQuality = player.getPlaybackQuality?.();
         const targetQuality = state.format?.choice.quality
             || (needsRecovery ? currentQuality : state.preferred !== 'auto' ? state.preferred : currentQuality);
         const target = candidates.find(item => item.quality === targetQuality) || candidates.at(-1);
@@ -245,8 +251,10 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
 
         let recoveryHeight = state.recoveryHeight;
         if (needsRecovery) {
-            const lower = candidates.filter(item => item.height < target.height
-                && (!recoveryHeight || item.height < recoveryHeight)).at(-1);
+            // Step below the existing cap even if the player still reports the
+            // old stream. Otherwise the same cap is computed and never sent.
+            const ceiling = Math.min(target.height, capHeight || Infinity, recoveryHeight || Infinity);
+            const lower = candidates.filter(item => item.height < ceiling).at(-1);
             if (lower) recoveryHeight = lower.height;
         }
 

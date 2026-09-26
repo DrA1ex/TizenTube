@@ -122,6 +122,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         const manualChange = preferred && preferred !== state.cap && preferred !== state.preferred;
         if (preferred && preferred !== state.cap) state.preferred = preferred;
 
+        const newVideo = Boolean(state.videoId && videoId && state.videoId !== videoId);
         const changed = state.video !== video || state.videoId !== videoId || state.speed !== speed;
         if (changed || manualChange) {
             state.video = video;
@@ -135,6 +136,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             state.hasProgress = false;
             state.releaseFormat = Boolean(state.format);
             state.format = null;
+            if (newVideo) state.tryMaximum = true;
         }
 
         let response = player.getPlayerResponse?.();
@@ -197,7 +199,10 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         const currentHeight = candidates.find(item => item.quality === (currentFormat?.quality || currentQuality))?.height;
         const capHeight = candidates.find(item => item.quality === state.cap)?.height;
         const failedCap = speed > 1.01 && capHeight && currentHeight > capHeight;
-        state.networkSince = starving && (state.hasProgress || failedCap)
+        const heavyTrial = state.tryMaximum && speed > 1.01
+            && (currentFormat?.pixelRate || candidates.find(item => item.height === currentHeight)?.pixelRate || 0)
+                * speed > VIDEO_PIXEL_RATE_BUDGET;
+        state.networkSince = starving && (state.hasProgress || failedCap || heavyTrial)
             ? (state.networkSince ?? now) : null;
         if (starving && state.networkSince !== null && now - state.networkSince >= NETWORK_STALL_MS
             && now >= (state.cooldownUntil || 0)) needsRecovery = true;
@@ -225,7 +230,8 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             || formats.filter(format => format.quality === target.quality)
                 .sort((a, b) => b.pixelRate - a.pixelRate || b.bitrate - a.bitrate)[0];
         const overloaded = (baseline?.pixelRate || target.pixelRate) * speed > VIDEO_PIXEL_RATE_BUDGET;
-        if ((needsRecovery || (speed > 1.01 && overloaded))
+        if (needsRecovery) state.tryMaximum = false;
+        if ((needsRecovery || (speed > 1.01 && overloaded && !state.tryMaximum))
             && (player.getVideoStats || player.getStatsForNerds)) {
             if (state.format) state.tried.add(state.format.choice.id);
             const alternatives = lighterPlaybackFormats(formats, baseline, state.tried,
@@ -258,7 +264,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             if (lower) recoveryHeight = lower.height;
         }
 
-        let limit = accelerationQualityLimit(candidates, speed);
+        let limit = state.tryMaximum ? null : accelerationQualityLimit(candidates, speed);
         // A confirmed lighter current stream can fit even though another variant
         // at the same resolution exceeds the conservative range-only budget.
         if (!needsRecovery && currentFormat && currentFormat.pixelRate * speed <= VIDEO_PIXEL_RATE_BUDGET

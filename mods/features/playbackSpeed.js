@@ -76,6 +76,9 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
     documentRef.addEventListener('canplay', onMediaEvent, true);
     documentRef.addEventListener('ratechange', onMediaEvent, true);
     documentRef.addEventListener('loadedmetadata', onMediaEvent, true);
+    for (const type of ['waiting', 'stalled', 'playing', 'pause', 'seeking', 'seeked']) {
+        documentRef.addEventListener(type, onMediaEvent, true);
+    }
     if (documentRef.querySelector('video')) apply();
 
     // timeupdate/canplay stop during the very stall we need to recover from.
@@ -83,10 +86,11 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
     const windowRef = documentRef.defaultView;
     const timer = windowRef?.setInterval?.(() => {
         if (isCobalt(documentRef) && documentRef.querySelector('video')) apply();
-    }, 1000);
+    }, 500);
 
     return () => {
-        for (const type of ['canplay', 'ratechange', 'loadedmetadata']) {
+        for (const type of ['canplay', 'ratechange', 'loadedmetadata',
+            'waiting', 'stalled', 'playing', 'pause', 'seeking', 'seeked']) {
             documentRef.removeEventListener(type, onMediaEvent, true);
         }
 

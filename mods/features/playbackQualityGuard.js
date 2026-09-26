@@ -7,6 +7,11 @@ import {
 export const VIDEO_PIXEL_RATE_BUDGET = 3840 * 2160 * 60;
 const states = new WeakMap();
 const RESTORE_KEY = 'tt-acceleration-quality-restore';
+const STALL_MS = 1500;
+const NETWORK_STALL_MS = 2000;
+const SWITCH_SETTLE_MS = 1500;
+const FORMAT_TRIAL_MS = 4000;
+const MAX_SAMPLE_GAP_MS = 2000;
 
 export function playbackQualityCandidates(available, formats = []) {
     const candidates = new Map();
@@ -89,7 +94,7 @@ export function applyPreferredQuality(player, quality) {
     }
 }
 
-// Called on speed/media changes and once a second. There is no
+// Called on speed/media changes, buffering events and a short timer. There is no
 // per-frame JS work, seeking, or alteration of compressed frame dependencies.
 export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
     if (!player?.setPlaybackQualityRange || !player.getAvailableQualityData || !video) return;
@@ -124,15 +129,13 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             state.speed = speed;
             state.recoveryHeight = null;
             state.sample = null;
-            state.badWindows = 0;
-            state.cooldownUntil = now + 8000;
+            state.cooldownUntil = now;
             state.tried.clear();
             state.networkSince = null;
+            state.hasProgress = false;
             state.releaseFormat = Boolean(state.format);
             state.format = null;
         }
-
-        if (speed <= 1.01 && !state.cap) return;
 
         let response = player.getPlayerResponse?.();
         if (typeof response === 'string') response = JSON.parse(response);
@@ -143,45 +146,59 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         const formats = playbackFormats(response?.streamingData?.adaptiveFormats);
         const currentFormat = currentPlaybackFormat(player, formats);
         let needsRecovery = false;
-        if (speed <= 1.01) {
-            state.recoveryHeight = null;
-            state.sample = null;
+        const playing = !video.paused && !video.ended && !video.seeking;
+        const ahead = bufferedAhead(video);
+        const buffered = playing && ahead >= speed * 2 && (video.readyState === undefined || video.readyState >= 3);
+        const frames = buffered ? frameCounts(video) : null;
+        const sample = state.sample;
+        // A long gap means the JS timer was suspended. A seek can also jump the
+        // media clock without a seeking event reaching this document.
+        if (!playing) state.hasProgress = false;
+        if (!buffered || !sample || now - sample.now > MAX_SAMPLE_GAP_MS
+            || video.currentTime < sample.time || video.currentTime - sample.time > (now - sample.now) / 1000 * speed * 1.5) {
+            state.sample = buffered ? { now, time: video.currentTime, frames,
+                progressAt: now, frameAt: now, windowAt: now, windowTime: video.currentTime,
+                windowFrames: frames } : null;
         } else {
-            // Recover from sustained decoder stalls even when nominal pixel rate
-            // fits the budget. Empty buffers, pauses and seeks are not evidence.
-            const active = !video.paused && !video.ended && !video.seeking && bufferedAhead(video) >= speed * 2;
-            if (!active || now < (state.cooldownUntil || 0)) {
-                state.sample = null;
-                state.badWindows = 0;
-            } else if (!state.sample) {
-                state.sample = { now, time: video.currentTime, frames: frameCounts(video) };
-            } else if (now - state.sample.now >= 3000) {
-                const elapsed = (now - state.sample.now) / 1000;
-                const progress = video.currentTime - state.sample.time;
-                // Ignore discontinuities from seeks and suspended JS timers.
-                const frames = frameCounts(video);
-                const frozen = state.sample.frames?.presented > 0 && frames
-                    && frames.total >= state.sample.frames.total && frames.presented === state.sample.frames.presented;
-                const presented = frames && state.sample.frames && frames.presented - state.sample.frames.presented;
-                const stuttering = currentFormat && frames && state.sample.frames
-                    && frames.total > state.sample.frames.total && presented >= 0
-                    && presented < elapsed * Math.min(60, currentFormat.fps * speed) * 0.7;
-                const slow = elapsed <= 5 && progress >= 0 && progress <= elapsed * speed * 1.3
-                    && (progress < elapsed * speed * 0.7 || frozen || stuttering);
-                state.badWindows = slow ? (state.badWindows || 0) + 1 : 0;
-                state.sample = { now, time: video.currentTime, frames };
-                if (state.badWindows >= 2) {
-                    needsRecovery = true;
-                    state.badWindows = 0;
-                    state.cooldownUntil = now + 8000;
-                }
+            if (video.currentTime > sample.time) {
+                sample.progressAt = now;
+                state.hasProgress = true;
             }
+            if (frames && sample.frames && frames.presented > sample.frames.presented) sample.frameAt = now;
+            if (!frames || !sample.frames || frames.total < sample.frames.total) sample.frameAt = now;
+            const elapsed = (now - sample.windowAt) / 1000;
+            const progress = video.currentTime - sample.windowTime;
+            const presented = frames && sample.windowFrames && frames.presented - sample.windowFrames.presented;
+            const slow = elapsed >= STALL_MS / 1000 && elapsed <= MAX_SAMPLE_GAP_MS / 1000
+                && progress >= 0 && progress < elapsed * speed * 0.55;
+            const dropping = elapsed >= STALL_MS / 1000 && currentFormat && frames && sample.windowFrames
+                && frames.total > sample.windowFrames.total && presented >= 0
+                && presented < elapsed * Math.min(60, currentFormat.fps * speed) * 0.55;
+            const frozen = sample.frames?.presented > 0 && frames && frames.total >= sample.frames.total
+                && now - sample.frameAt >= STALL_MS;
+            if (now >= (state.cooldownUntil || 0)
+                && (now - sample.progressAt >= STALL_MS || frozen || slow || dropping)) needsRecovery = true;
+            if (elapsed >= STALL_MS / 1000) {
+                sample.windowAt = now;
+                sample.windowTime = video.currentTime;
+                sample.windowFrames = frames;
+            }
+            sample.now = now;
+            sample.time = video.currentTime;
+            sample.frames = frames;
         }
 
-        if (state.format && speed > 1.01) {
+        // A locked format can starve even when the decoder is healthy. Only
+        // react to an empty buffer after playback has previously advanced.
+        const starving = playing && video.readyState < 3 && ahead < speed;
+        state.networkSince = starving && state.hasProgress ? (state.networkSince ?? now) : null;
+        if (starving && state.networkSince !== null && now - state.networkSince >= NETWORK_STALL_MS
+            && now >= (state.cooldownUntil || 0)) needsRecovery = true;
+
+        if (state.format) {
             if (currentFormat?.id === state.format.choice.id) state.format.lastSeen = now;
             else if (video.paused || video.seeking || video.ended) state.format.started = now;
-            else if (now - Math.max(state.format.started, state.format.lastSeen || 0) >= 12000) {
+            else if (now - Math.max(state.format.started, state.format.lastSeen || 0) >= FORMAT_TRIAL_MS) {
                 // A successful API call is not proof that the loader accepted the
                 // format. Future player versions may ignore the third argument.
                 needsRecovery = true;
@@ -189,11 +206,6 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
 
             // Pinning a format temporarily suspends ABR. Do not keep that pin
             // through a network stall; try a lighter variant or release it below.
-            const starving = !video.paused && !video.seeking && !video.ended && video.readyState < 3
-                && bufferedAhead(video) < speed;
-            state.networkSince = starving ? (state.networkSince ?? now) : null;
-            if (starving && now - state.networkSince >= 4000) needsRecovery = true;
-
             if (!needsRecovery) return;
         }
 
@@ -207,7 +219,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             || formats.filter(format => format.quality === target.quality)
                 .sort((a, b) => b.pixelRate - a.pixelRate || b.bitrate - a.bitrate)[0];
         const overloaded = (baseline?.pixelRate || target.pixelRate) * speed > VIDEO_PIXEL_RATE_BUDGET;
-        if (speed > 1.01 && (needsRecovery || overloaded)
+        if ((needsRecovery || (speed > 1.01 && overloaded))
             && (player.getVideoStats || player.getStatsForNerds)) {
             if (state.format) state.tried.add(state.format.choice.id);
             const alternatives = lighterPlaybackFormats(formats, baseline, state.tried,
@@ -222,7 +234,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
                     state.releaseFormat = false;
                     state.cap = choice.quality;
                     saveRestorePreference(video, state.preferred, state.cap);
-                    state.cooldownUntil = now + 8000;
+                    state.cooldownUntil = now + SWITCH_SETTLE_MS;
                     state.networkSince = null;
                     state.sample = null;
                     console.info('[PlaybackSpeed] Trying lighter format:', choice.id, choice.quality, choice.fps);
@@ -231,10 +243,11 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             }
         }
 
+        let recoveryHeight = state.recoveryHeight;
         if (needsRecovery) {
             const lower = candidates.filter(item => item.height < target.height
-                && (!state.recoveryHeight || item.height < state.recoveryHeight)).at(-1);
-            if (lower) state.recoveryHeight = lower.height;
+                && (!recoveryHeight || item.height < recoveryHeight)).at(-1);
+            if (lower) recoveryHeight = lower.height;
         }
 
         let limit = accelerationQualityLimit(candidates, speed);
@@ -242,8 +255,8 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         // at the same resolution exceeds the conservative range-only budget.
         if (!needsRecovery && currentFormat && currentFormat.pixelRate * speed <= VIDEO_PIXEL_RATE_BUDGET
             && (!state.cap || state.releaseFormat || currentFormat.quality === candidates.at(-1).quality)) limit = null;
-        if (state.recoveryHeight) {
-            const recovery = candidates.filter(item => item.height <= state.recoveryHeight).at(-1);
+        if (recoveryHeight) {
+            const recovery = candidates.filter(item => item.height <= recoveryHeight).at(-1);
             if (recovery && (!limit || recovery.height < limit.height)) limit = recovery;
         }
 
@@ -255,10 +268,11 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
                 // Upper bound only: leave ABR free to go lower when bandwidth falls.
                 player.setPlaybackQualityRange('tiny', cap);
                 state.cap = cap;
+                state.recoveryHeight = recoveryHeight;
                 state.format = null;
                 state.releaseFormat = false;
                 saveRestorePreference(video, state.preferred, cap);
-                state.cooldownUntil = now + 8000;
+                state.cooldownUntil = now + SWITCH_SETTLE_MS;
                 state.sample = null;
                 console.info('[PlaybackSpeed] Temporary quality limit:', cap, 'at', speed);
             }

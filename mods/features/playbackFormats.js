@@ -1,4 +1,9 @@
 // TV player format IDs are itag + optional xtags, not the resolution's quality ID.
+function codecFamily(mimeType) {
+    const codec = mimeType?.match(/codecs\s*=\s*["']?([a-z\d]+)/i)?.[1]?.toLowerCase();
+    return codec === 'vp09' ? 'vp9' : codec;
+}
+
 export function playbackFormats(formats = []) {
     return formats.filter(format => format.mimeType?.startsWith('video/') && format.itag
         && format.width > 0 && format.height > 0 && format.fps > 0 && format.quality)
@@ -17,6 +22,7 @@ export function lighterPlaybackFormats(formats, current, tried, supported) {
     return formats.filter(format => format.id !== current.id && !tried.has(format.id)
         && format.quality === current.quality && format.width === current.width && format.height === current.height
         && format.projection === current.projection
+        && codecFamily(format.mimeType) && codecFamily(format.mimeType) === codecFamily(current.mimeType)
         && (format.pixelRate < current.pixelRate || (format.pixelRate === current.pixelRate
             && format.bitrate > 0 && current.bitrate > 0 && format.bitrate < current.bitrate))
         && supported(format.mimeType))

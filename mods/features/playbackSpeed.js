@@ -1,4 +1,4 @@
-import { guardPlaybackQuality } from './playbackQualityGuard.js';
+import { guardPlaybackQuality, prepareNewVideoQuality } from './playbackQualityGuard.js';
 
 const MIN_SPEED = 0.25;
 const MAX_SPEED = 5;
@@ -84,6 +84,13 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
     // timeupdate/canplay stop during the very stall we need to recover from.
     // A cheap timer also catches manual quality changes and reused video nodes.
     const windowRef = documentRef.defaultView;
+    const onRouteChange = () => {
+        if (isCobalt(documentRef)) {
+            prepareNewVideoQuality(documentRef.querySelector('.html5-video-player'),
+                documentRef.querySelector('video'), windowRef?.location?.hash);
+        }
+    };
+    windowRef?.addEventListener?.('hashchange', onRouteChange);
     const timer = windowRef?.setInterval?.(() => {
         if (isCobalt(documentRef) && documentRef.querySelector('video')) apply();
     }, 500);
@@ -95,5 +102,6 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
         }
 
         windowRef?.clearInterval?.(timer);
+        windowRef?.removeEventListener?.('hashchange', onRouteChange);
     };
 }

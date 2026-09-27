@@ -12,6 +12,7 @@ const FRAME_STALL_MS = 5000;
 const NETWORK_STALL_MS = 2000;
 const SWITCH_SETTLE_MS = 1500;
 const FORMAT_TRIAL_MS = 4000;
+const MAXIMUM_TRIAL_MS = 1500;
 const MAX_SAMPLE_GAP_MS = 2000;
 
 export function playbackQualityCandidates(available, formats = []) {
@@ -198,6 +199,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             state.cooldownUntil = now;
             state.tried.clear();
             state.networkSince = null;
+            state.heavySince = null;
             state.releaseFormat = Boolean(state.format);
             state.format = null;
             if (newVideo) state.tryMaximum = true;
@@ -212,6 +214,20 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         const formats = playbackFormats(response?.streamingData?.adaptiveFormats);
         const currentFormat = currentPlaybackFormat(player, formats);
         const currentQuality = player.getPlaybackQuality?.();
+        const activePixelRate = currentFormat?.pixelRate
+            ?? candidates.find(item => item.quality === currentQuality)?.pixelRate;
+        if (state.tryMaximum) {
+            // Autoplay may start at 1440p and upgrade to 4K later. Start the
+            // trial from the active format (or current quality if format stats
+            // are unavailable), never from the recommended quality.
+            if (speed > 1.01 && activePixelRate * speed > VIDEO_PIXEL_RATE_BUDGET
+                && !video.paused && !video.seeking && !video.ended) {
+                state.heavySince ??= now;
+                if (now - state.heavySince >= MAXIMUM_TRIAL_MS) state.tryMaximum = false;
+            } else {
+                state.heavySince = null;
+            }
+        }
         let needsRecovery = false;
         const playing = !video.paused && !video.ended && !video.seeking;
         const ahead = bufferedAhead(video);

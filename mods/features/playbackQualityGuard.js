@@ -105,6 +105,7 @@ export function applyPreferredQuality(player, quality) {
         } else {
             player.setPlaybackQualityRange(quality, quality);
             state.cap = null;
+            state.capAppliedAt = undefined;
             state.lockedRecovery = false;
             saveRestorePreference(state.video, null, null);
         }
@@ -127,6 +128,7 @@ export function prepareNewVideoQuality(player, video, hash) {
         const preferred = state.preferred || 'auto';
         player.setPlaybackQualityRange(preferred, preferred);
         state.cap = null;
+        state.capAppliedAt = undefined;
         state.staleCap = null;
         state.lockedRecovery = false;
         state.format = null;
@@ -166,19 +168,27 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         }
 
         // Track manual choices, including changes made outside TizenTube's menu.
+        const playerPreferenceChanged = state.lastPlayerPreferred !== undefined
+            && preferred !== state.lastPlayerPreferred;
+        state.lastPlayerPreferred = preferred;
         const manualChange = preferred && preferred !== state.cap && preferred !== state.staleCap
             && preferred !== state.preferred;
         if (preferred && preferred !== state.cap && preferred !== state.staleCap) state.preferred = preferred;
 
         const newVideo = Boolean(state.videoId && videoId && state.videoId !== videoId);
+        const speedChanged = state.speed !== speed;
         if (newVideo) {
             // YouTube starts the next video with its own quality choice. A
             // range write here can restart a stream that is already playing.
             state.staleCap = state.cap || state.staleCap;
             state.cap = null;
+            state.capAppliedAt = undefined;
             state.lockedRecovery = false;
         }
-        const changed = state.video !== video || state.videoId !== videoId || state.speed !== speed;
+        // A fresh video gets one attempt at its highest quality. Changing the
+        // speed later is a new workload and must apply the workload cap now.
+        if (speedChanged && !newVideo) state.tryMaximum = false;
+        const changed = state.video !== video || state.videoId !== videoId || speedChanged;
         if (changed || manualChange) {
             state.video = video;
             state.videoId = videoId;
@@ -210,10 +220,21 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         const sample = state.sample;
         // A long gap means the JS timer was suspended. A seek can also jump the
         // media clock without a seeking event reaching this document.
-        if (!buffered || !sample || now - sample.now > MAX_SAMPLE_GAP_MS
-            || video.currentTime < sample.time || video.currentTime - sample.time > (now - sample.now) / 1000 * speed * 1.5) {
+        const elapsedSinceSample = sample && (now - sample.now) / 1000;
+        const timeSinceSample = sample && video.currentTime - sample.time;
+        const continuousTime = sample && timeSinceSample >= 0
+            && timeSinceSample <= elapsedSinceSample * speed * 1.5;
+        if (!buffered || !sample || now - sample.now > MAX_SAMPLE_GAP_MS || !continuousTime) {
+            // A busy decoder can also delay this timer. Keep the last frame
+            // timestamp when audio time advanced normally but video frames did
+            // not; otherwise every long callback gap hides the frozen picture.
+            const frameAt = buffered && continuousTime && sample.frames?.presented > 0 && frames
+                && frames.total >= sample.frames.total && frames.presented === sample.frames.presented
+                ? sample.frameAt : now;
             state.sample = buffered ? { now, time: video.currentTime, frames,
-                progressAt: now, frameAt: now, windowAt: now, windowTime: video.currentTime } : null;
+                progressAt: now, frameAt, windowAt: now, windowTime: video.currentTime } : null;
+            if (frameAt !== now && now - frameAt >= FRAME_STALL_MS
+                && timeSinceSample > 0 && now >= (state.cooldownUntil || 0)) needsRecovery = true;
         } else {
             if (video.currentTime > sample.time) {
                 sample.progressAt = now;
@@ -245,6 +266,21 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         const currentHeight = candidates.find(item => item.quality === (currentFormat?.quality || currentQuality))?.height;
         const capHeight = candidates.find(item => item.quality === state.cap)?.height;
         const failedCap = speed > 1.01 && capHeight && currentHeight > capHeight;
+        if (failedCap && buffered && state.capAppliedAt !== undefined
+            && now - state.capAppliedAt >= 3000 && now >= (state.cooldownUntil || 0)) {
+            if (!state.lockedRecovery) {
+                // The upper bound can change YouTube's preference without
+                // replacing the decoder stream. Pin the same resolution once
+                // before considering a lower one.
+                player.setPlaybackQualityRange(state.cap, state.cap);
+                state.lockedRecovery = true;
+                state.capAppliedAt = now;
+                state.cooldownUntil = now + SWITCH_SETTLE_MS;
+                state.sample = null;
+                return;
+            }
+            needsRecovery = true;
+        }
         const heavyTrial = state.tryMaximum && speed > 1.01
             && (currentFormat?.pixelRate || candidates.find(item => item.height === currentHeight)?.pixelRate || 0)
                 * speed > VIDEO_PIXEL_RATE_BUDGET;
@@ -302,6 +338,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
                     state.format = { choice, started: now, lastSeen: 0 };
                     state.releaseFormat = false;
                     state.cap = choice.quality;
+                    state.capAppliedAt = now;
                     state.lockedRecovery = false;
                     state.staleCap = null;
                     saveRestorePreference(video, state.preferred, state.cap);
@@ -338,12 +375,14 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
         const cap = limit?.quality || null;
         if (cap) {
             if (state.cap !== cap || state.format || state.releaseFormat
-                || (needsRecovery && !state.lockedRecovery) || (preferred && preferred !== cap)) {
+                || (needsRecovery && !state.lockedRecovery)
+                || (playerPreferenceChanged && preferred && preferred !== cap)) {
                 // A confirmed freeze needs a fixed range to force the current
                 // loader off its stalled stream. The proactive speed cap stays
                 // an upper bound so ordinary network ABR remains available.
                 player.setPlaybackQualityRange(needsRecovery ? cap : 'tiny', cap);
                 state.cap = cap;
+                state.capAppliedAt = now;
                 state.lockedRecovery = needsRecovery;
                 state.staleCap = null;
                 state.recoveryHeight = recoveryHeight;
@@ -358,6 +397,7 @@ export function guardPlaybackQuality(player, video, speed, now = Date.now()) {
             const restore = wanted?.quality || 'auto';
             player.setPlaybackQualityRange(restore, restore);
             state.cap = null;
+            state.capAppliedAt = undefined;
             state.lockedRecovery = false;
             state.format = null;
             state.releaseFormat = false;

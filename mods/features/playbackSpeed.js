@@ -1,4 +1,5 @@
 import { restoreLegacyQualityPreference } from './playbackQualityGuard.js';
+import { installBufferedWaitingFilter } from './bufferedWaitingFilter.js';
 
 const MIN_SPEED = 0.25;
 const MAX_SPEED = 5;
@@ -69,6 +70,8 @@ export function applyPlaybackSpeed(value, targets = {}) {
 
 export function installPlaybackSpeed(documentRef, readSpeed) {
     const apply = () => applyPlaybackSpeed(readSpeed(), { documentRef });
+    const stopWaitingFilter = isCobalt(documentRef)
+        ? installBufferedWaitingFilter(documentRef, readSpeed) : null;
     // Media events do not bubble. Capture also covers elements replaced by YouTube.
     const onMediaEvent = event => {
         if (event.type === 'ratechange' && !isCobalt(documentRef)) return;
@@ -89,6 +92,7 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
     }, 500);
 
     return () => {
+        stopWaitingFilter?.();
         for (const type of ['canplay', 'ratechange', 'loadedmetadata',
             'waiting', 'stalled', 'playing', 'pause', 'seeking', 'seeked']) {
             documentRef.removeEventListener(type, onMediaEvent, true);

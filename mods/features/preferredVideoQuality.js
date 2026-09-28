@@ -1,6 +1,5 @@
 import { configRead, configChangeEmitter } from "../config.js";
-import { determineQuality } from './preferredQualityPolicy.js';
-import { applyPreferredQuality } from './playbackQualityGuard.js';
+import { PreferredQualitySession } from './preferredQualitySession.js';
 
 const SELECTORS = {
     PLAYER: '.html5-video-player',
@@ -18,8 +17,8 @@ const CONFIG_KEYS = {
 class PreferredQualityHandler {
     #player = null;
     #attachTimeout = null;
-    #lastVideoId = null;
-    #hasAppliedQuality = false;
+    #retryTimeout = null;
+    #quality = new PreferredQualitySession();
 
     constructor() {
         this.init();
@@ -50,46 +49,30 @@ class PreferredQualityHandler {
     #setupConfigListener() {
         configChangeEmitter.addEventListener(EVENTS.CONFIG_CHANGE, (ev) => {
             if (ev.detail?.key === CONFIG_KEYS.QUALITY) {
-                this.#applyQuality();
+                this.#applyQuality(true);
             }
         });
     }
 
     #handleStateChange = () => {
-        const state = this.#player?.getPlayerStateObject?.();
-        const videoData = this.#player?.getVideoData?.();
-        const videoId = videoData?.video_id;
-
-        if (videoId !== this.#lastVideoId) {
-            this.#lastVideoId = videoId;
-            this.#hasAppliedQuality = false;
-        }
-
-        const isShorts = Object.values(this.#player.getVideoStats()).find(a => a && a === 'shortspage');
-        if (state?.isPlaying && !this.#hasAppliedQuality && !isShorts) {
-            this.#hasAppliedQuality = this.#applyQuality();
-        }
+        this.#applyQuality();
     };
 
-    #applyQuality() {
+    #applyQuality(configChanged = false) {
         const preferredQuality = configRead(CONFIG_KEYS.QUALITY);
-        if (!preferredQuality || preferredQuality === 'auto' || !this.#player) return false;
-
         try {
-            const quality = this.#determineQuality(preferredQuality);
-
-            if (quality) {
-                applyPreferredQuality(this.#player, quality);
-                return true;
+            const applied = this.#quality.apply(this.#player, preferredQuality, { configChanged });
+            clearTimeout(this.#retryTimeout);
+            if (!applied && preferredQuality && preferredQuality !== 'auto') {
+                let playing = false;
+                try { playing = Boolean(this.#player?.getPlayerStateObject?.()?.isPlaying); } catch (_) {}
+                if (playing) this.#retryTimeout = setTimeout(() => this.#applyQuality(), 1000);
             }
+            return applied;
         } catch (e) {
             console.warn('[PreferredQuality] Failed to apply quality:', e);
+            return false;
         }
-        return false;
-    }
-
-    #determineQuality(preference) {
-        return determineQuality(preference, this.#player.getAvailableQualityData());
     }
 }
 

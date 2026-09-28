@@ -1,4 +1,4 @@
-import { guardPlaybackQuality, prepareNewVideoQuality } from './playbackQualityGuard.js';
+import { restoreLegacyQualityPreference } from './playbackQualityGuard.js';
 
 const MIN_SPEED = 0.25;
 const MAX_SPEED = 5;
@@ -24,7 +24,8 @@ export function applyPlaybackSpeed(value, targets = {}) {
     const cobalt = targets.cobalt ?? isCobalt(documentRef);
 
     // Keep the loader's media ratechange path without YouTube's blanket HFR cap.
-    // Our temporary quality range accounts for resolution * FPS * speed instead.
+    // Leave stream adaptation to the player; quality-range writes can restart
+    // playback and interrupt translation, especially around seeks.
     if (cobalt) {
         if (!video) return { applied: false, via: 'unavailable', speed };
         try {
@@ -33,7 +34,7 @@ export function applyPlaybackSpeed(value, targets = {}) {
                 player.setPlaybackRate(1);
             }
 
-            guardPlaybackQuality(player, video, speed);
+            restoreLegacyQualityPreference(player, video);
             if (video.playbackRate !== speed) video.playbackRate = speed;
             return { applied: true, via: 'cobalt-media', speed };
         } catch (error) {
@@ -81,16 +82,8 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
     }
     if (documentRef.querySelector('video')) apply();
 
-    // timeupdate/canplay stop during the very stall we need to recover from.
-    // A cheap timer also catches manual quality changes and reused video nodes.
+    // The timer restores the configured speed if a reused video node resets it.
     const windowRef = documentRef.defaultView;
-    const onRouteChange = () => {
-        if (isCobalt(documentRef)) {
-            prepareNewVideoQuality(documentRef.querySelector('.html5-video-player'),
-                documentRef.querySelector('video'), windowRef?.location?.hash);
-        }
-    };
-    windowRef?.addEventListener?.('hashchange', onRouteChange);
     const timer = windowRef?.setInterval?.(() => {
         if (isCobalt(documentRef) && documentRef.querySelector('video')) apply();
     }, 500);
@@ -102,6 +95,5 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
         }
 
         windowRef?.clearInterval?.(timer);
-        windowRef?.removeEventListener?.('hashchange', onRouteChange);
     };
 }

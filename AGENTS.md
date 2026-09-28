@@ -4,4 +4,5 @@
 - Before editing, inspect `git status --short --branch` and preserve existing user work.
 - Keep documentation and new prose in English. Existing localization resources remain multilingual.
 - Run the relevant tests from the builder repository and build `mods/` before completing a change. Commit each completed user requirement with a descriptive message.
-- After pushing a source commit, update the submodule pointer in the builder repository and commit that pointer with related native or build changes. Do not publish a builder commit that points to an unavailable fork commit.
+- Local commits are allowed. Never push this fork or the builder repository without the user's explicit permission. A request to edit, build, test, or commit does not authorize a push.
+- After committing a source change, update and commit the submodule pointer in the builder repository. Before publishing the builder commit, ensure the fork commit is available remotely.

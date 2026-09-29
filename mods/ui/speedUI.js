@@ -1,9 +1,9 @@
-import { configRead } from '../config.js';
+import { configRead, configWrite } from '../config.js';
 import { installPlaybackSpeed } from '../features/playbackSpeed.js';
 import { showModal, buttonItem, overlayPanelItemListRenderer } from './ytUI.js';
 import { t } from 'i18next';
 
-installPlaybackSpeed(document, () => configRead('videoSpeed'));
+installPlaybackSpeed(document, () => configRead('videoSpeed'), { resetSpeed: speed => configWrite('videoSpeed', speed) });
 execute_once_dom_loaded_speed();
 
 function execute_once_dom_loaded_speed() {
@@ -28,7 +28,7 @@ function execute_once_dom_loaded_speed() {
 }
 
 function speedSettings() {
-    const currentSpeed = configRead('videoSpeed');
+    const currentSpeed = Number(configRead('videoSpeed'));
     let selectedIndex = 0;
     const maxSpeed = 5;
     const increment = configRead('speedSettingsIncrement') || 0.25;

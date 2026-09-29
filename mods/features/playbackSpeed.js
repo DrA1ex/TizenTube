@@ -3,6 +3,27 @@ import { installBufferedWaitingFilter } from './bufferedWaitingFilter.js';
 
 const MIN_SPEED = 0.25;
 const MAX_SPEED = 5;
+const playerRates = new WeakMap();
+
+function exposeMediaPlaybackRate(player, video) {
+    if (!player || typeof player.getPlaybackRate !== 'function') return;
+    let entry = playerRates.get(player);
+    if (!entry) {
+        entry = { original: player.getPlaybackRate, video };
+        try {
+            // UI consumers use the public getter. Cobalt's internal API rate is
+            // kept at 1 to avoid its blanket HFR cap; the media rate is audible.
+            player.getPlaybackRate = () => Number(entry.video?.playbackRate) || entry.original.call(player);
+            playerRates.set(player, entry);
+        } catch (_) { return; }
+    }
+    entry.video = video;
+}
+function apiPlaybackRate(player) {
+    const getter = playerRates.get(player)?.original || player?.getPlaybackRate;
+    return getter?.call(player);
+}
+
 
 function isCobalt(documentRef) {
     const windowRef = documentRef?.defaultView || globalThis.window;
@@ -30,8 +51,9 @@ export function applyPlaybackSpeed(value, targets = {}) {
     if (cobalt) {
         if (!video) return { applied: false, via: 'unavailable', speed };
         try {
+            exposeMediaPlaybackRate(player, video);
             if (typeof player?.getPlaybackRate === 'function' && typeof player?.setPlaybackRate === 'function'
-                && player.getPlaybackRate() !== 1) {
+                && apiPlaybackRate(player) !== 1) {
                 player.setPlaybackRate(1);
             }
 

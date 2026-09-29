@@ -1,5 +1,5 @@
 import { audioText } from '../features/audioLocale.js';
-import { configRead } from '../config.js';
+import { configRead, configWrite } from '../config.js';
 import { audioFlow, rememberAudioLogin } from '../features/audioFlow.js';
 import { audioInventory, filteredYouTubeTracks, languageName, LANGUAGE_CODES, YANDEX_TARGETS } from '../features/audioTracks.js';
 import { getCurrentVideoId, getVotState, loginYandex, setOAuthToken, clearOAuthToken, refreshVotAuthorization } from '../features/vot.js';
@@ -19,10 +19,13 @@ export function showAudioMenu(section = 'main', requestedPage = 0, update = fals
         retrying: audioText('networkErrorRetrying'),
         ready: audioText('trackReady'), playing: audioText('trackEnabled'), switching: audioText('switchingTracks'), auth: audioText('yandexSignInRequired'), error: audioText('couldNotSwitchTracks') };
     const hasVideo = Boolean(getCurrentVideoId());
-    const selected = choice => state.audible ? state.audible.provider === choice.provider && (!choice.trackId || choice.trackId === state.audible.trackId)
+    const activeChoice = state.requested?.provider !== 'current' ? state.requested || state.audible : state.audible;
+    const selected = choice => activeChoice ? activeChoice.provider === choice.provider && (!choice.trackId || choice.trackId === activeChoice.trackId)
         : choice.provider === 'original' ? Boolean(inventory.original) && inventory.selected?.id === inventory.original.id
         : choice.provider === 'youtube' && choice.trackId && inventory.selected?.id === choice.trackId;
-    const choose = (title, subtitle, choice) => row(title, subtitle, 'AUDIO_CHOOSE', choice, selected(choice));
+    const matchesDefault = configRead('audioAutoStart') && activeChoice?.provider === configRead('audioPreferredProvider')
+        && state.target === configRead('audioTargetLanguage');
+    const choose = (title, subtitle, choice) => row(title, subtitle, 'AUDIO_CHOOSE', { ...choice, section, page: requestedPage }, selected(choice));
     const summary = state.error || (state.status === 'waiting' && state.requested?.provider === 'youtube'
         ? audioText('youtubeRequestedTrackIsNotAvailable') : states[state.status]);
     let title = audioText('audioAndTranslation'), subtitle = summary, items;
@@ -33,8 +36,7 @@ export function showAudioMenu(section = 'main', requestedPage = 0, update = fals
             choose(audioText('original'), inventory.originalLanguage ? languageName(inventory.originalLanguage) : audioText('languageNotSpecifiedNoNeedTo'), { provider: 'original' }),
             menu('YouTube', audioText('selectedLanguagesOnly'), 'youtube'),
             choose(audioText('yandexStandard'), YANDEX_TARGETS.includes(state.target) ? audioText('noSignInRequired') : audioText('thisTranslationLanguageIsNotSupported'), { provider: 'standard' }),
-            choose(audioText('yandexExpressiveVoices'), auth.hasOAuthToken ? audioText('waitWithoutStoppingPlayback') : audioText('yandexSignInRequired'), { provider: 'lively' }),
-            menu(audioText('readinessAndWaiting'), summary, 'waiting')
+            choose(audioText('yandexExpressiveVoices'), auth.hasOAuthToken ? audioText('waitWithoutStoppingPlayback') : audioText('yandexSignInRequired'), { provider: 'lively' })
         ];
     } else if (section === 'youtube' && hasVideo) {
         title = audioText('youtubeTracks'); subtitle = audioText('setTheListedLanguagesInPreferences');
@@ -59,16 +61,21 @@ export function showAudioMenu(section = 'main', requestedPage = 0, update = fals
             row(audioText('pasteToken'), audioText('alternativeMethod'), 'AUDIO_TOKEN')
         ];
         if (auth.hasOAuthToken) items.push(row(audioText('removeToken'), audioText('standardTranslationWillRemainAvailable'), 'AUDIO_LOGOUT'));
+    } else if (section === 'scope' && hasVideo) {
+        title = audioText('selectionScope'); subtitle = audioText('doesNotChangeSavedPreferences');
+        items = [
+            row(audioText('thisVideoOnly'), '', 'AUDIO_SESSION', null, !matchesDefault),
+            row(audioText('saveAsDefault'), audioText('applyRulesWhenAVideoStarts'), 'AUDIO_SAVE_DEFAULT', null, matchesDefault)
+        ];
     } else {
-        section = 'main'; subtitle = hasVideo ? summary : audioText('preferencesForFutureVideos');
-        items = [];
-        if (hasVideo) {
-            items.push(menu(audioText('trackForThisVideo'), state.ready ? audioText('aNewTrackIsReady') : names[state.audible?.provider] || audioText('currentYouTubeTrack'), 'tracks'));
-            items.push(menu(audioText('languageForThisVideo'), languageName(state.target), 'language'));
-        }
-        items.push(row(audioText('volume'), audioText('separateTranslationAndOriginalVolume'), 'AUDIO_VOLUMES'));
-        items.push(row(audioText('preferences'), audioText('autoSelectionLanguagesWaiting'), 'AUDIO_PREFERENCES'));
-        items.push(menu(audioText('yandexAccount'), auth.hasOAuthToken ? audioText('signedIn') : audioText('forExpressiveVoices'), 'account'));
+        section = 'main'; subtitle = hasVideo ? summary : audioText('openAVideoFirst');
+        items = hasVideo ? [
+            menu(audioText('trackForThisVideo'), names[activeChoice?.provider] || audioText('currentYouTubeTrack'), 'tracks'),
+            menu(audioText('languageForThisVideo'), languageName(state.target), 'language'),
+            menu(audioText('selectionScope'), matchesDefault ? audioText('saveAsDefault') : audioText('thisVideoOnly'), 'scope')
+        ] : [];
+        if (hasVideo && ['waiting', 'preparing', 'retrying', 'ready', 'auth'].includes(state.status))
+            items.push(menu(audioText('readinessAndWaiting'), summary, 'waiting'));
     }
     // Only long lists are paged; main/provider menus have at most five rows already.
     let selectedIndex = 0;
@@ -79,7 +86,7 @@ export function showAudioMenu(section = 'main', requestedPage = 0, update = fals
         if (page.page > 0) items.push(row(audioText('previousPage'), '', 'AUDIO_MENU', { section, page: page.page - 1, update: true }));
         if (page.page + 1 < page.pageCount) items.push(row(audioText('nextPage'), '', 'AUDIO_MENU', { section, page: page.page + 1, update: true }));
     }
-    showModal({ title, subtitle }, overlayPanelItemListRenderer(items, selectedIndex), 'tt-audio-' + section, update);
+    showModal({ title, subtitle }, overlayPanelItemListRenderer(items, selectedIndex), 'tt-audio-' + section, update ? 'replace' : false);
 }
 
 export async function audioMenuAction(action, parameters) {
@@ -90,9 +97,33 @@ export async function audioMenuAction(action, parameters) {
         if (action === 'AUDIO_LANGUAGE') { showAudioMenu('language'); return; }
         if (action === 'AUDIO_LOGIN') { rememberAudioLogin(); await loginYandex(); return; }
         if (action === 'AUDIO_TOKEN') { await setOAuthToken(); return; }
-        if (action === 'AUDIO_LOGOUT') { audioFlow.cancelWaiting(); await clearOAuthToken(); showAudioMenu('account', 0, true); return; }
-        if (action === 'AUDIO_CHOOSE') { await audioFlow.select(parameters); showAudioMenu('tracks'); return; }
-        if (action === 'AUDIO_TARGET') { await audioFlow.setTarget(parameters); showAudioMenu('tracks'); return; }
+        if (action === 'AUDIO_LOGOUT') { audioFlow.cancelWaiting(); await clearOAuthToken(); return; }
+        if (action === 'AUDIO_CHOOSE') {
+            const { section = 'tracks', page = 0, ...choice } = parameters;
+            const pending = audioFlow.select(choice);
+            showAudioMenu(section, page, true);
+            await pending;
+            return;
+        }
+        if (action === 'AUDIO_TARGET') {
+            const pending = audioFlow.setTarget(parameters);
+            showAudioMenu('language', 0, true);
+            await pending;
+            return;
+        }
+        if (action === 'AUDIO_SESSION') { showAudioMenu('main'); return; }
+        if (action === 'AUDIO_SAVE_DEFAULT') {
+            const state = audioFlow.snapshot();
+            const provider = (state.requested || state.audible)?.provider;
+            if (['original', 'youtube', 'standard', 'lively'].includes(provider)) {
+                configWrite('audioPreferredProvider', provider);
+                configWrite('audioTargetLanguage', state.target);
+                configWrite('audioAutoStart', true);
+                showToast(audioText('audioAndTranslation'), audioText('defaultSaved'));
+            }
+            showAudioMenu('scope', 0, true);
+            return;
+        }
         if (action === 'AUDIO_READY') await audioFlow.applyReady();
         else if (action === 'AUDIO_CANCEL') audioFlow.cancelWaiting();
         else if (action === 'AUDIO_REFRESH') await refreshVotAuthorization();

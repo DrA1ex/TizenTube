@@ -16,6 +16,7 @@ export function votSettings() {
     const languages = LANGUAGE_CODES.map(code => [code, languageName(code)]);
     return group(audioText('audioPreferences'), 'preferences', [
         group(audioText('automaticSelection'), 'automatic', [
+            { name: audioText('enableTranslation'), value: 'enableVOT' },
             { name: audioText('autoSelectTrack'), value: 'audioAutoStart',
                 subtitle: audioText('applyRulesWhenAVideoStarts') },
             { name: audioText('translateOtherAudio'), value: 'audioAutoDifferentLanguage',
@@ -26,7 +27,7 @@ export function votSettings() {
                 subtitle: audioText('evenWhenYandexCannotDetectIt') }
         ]),
         radio(audioText('translationProvider'), 'audioPreferredProvider', [
-            ['youtube', 'YouTube'], ['standard', audioText('yandexStandard')], ['lively', audioText('yandexExpressiveVoices')]]),
+            ['original', audioText('original')], ['youtube', 'YouTube'], ['standard', audioText('yandexStandard')], ['lively', audioText('yandexExpressiveVoices')]]),
         group(audioText('languages'), 'languages', [
             radio(audioText('translationLanguage'), 'audioTargetLanguage', languages.map(([key, name]) =>
                 [key, name + (['ru', 'en', 'kk'].includes(key) ? '' : audioText('youtubeOnly2'))])),
@@ -34,12 +35,18 @@ export function votSettings() {
                 menuHeader: { title: audioText('youtubeTrackLanguages') }, arrayToEdit: 'audioVisibleLanguages',
                 options: languages.map(([value, name]) => ({ name, value })) }
         ]),
-        group(audioText('waitingForTranslation'), 'wait-policy', [
+        group(audioText('playbackAndVolume'), 'wait-policy', [
+            audioVolumeSettings(),
             radio(audioText('whenTheTrackIsReady'), 'audioReadyBehavior', [
                 ['switch', audioText('switchAutomatically')], ['notify', audioText('notifyOnly')]]),
             radio(audioText('whileTranslationIsBeingPrepared'), 'audioWaitingTrack', [
                 ['current', audioText('listenToTheCurrentTrack')], ['original', audioText('listenToTheOriginal')],
                 ['standard', audioText('useStandardYandexUntilReady')]])
+        ]),
+        group(audioText('yandexAccount'), 'account-settings', [
+            { name: audioText('signInToYandex'), value: null, action: { customAction: { action: 'AUDIO_LOGIN' } } },
+            { name: audioText('pasteToken'), value: null, action: { customAction: { action: 'AUDIO_TOKEN' } } },
+            { name: audioText('removeToken'), value: null, action: { customAction: { action: 'AUDIO_LOGOUT' } } }
         ])
     ]);
 }

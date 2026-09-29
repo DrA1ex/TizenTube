@@ -3,25 +3,37 @@
 import { extractAssignedFunctions } from "../utils/ASTParser.js";
 import { configRead } from "../config.js";
 import { ButtonRenderer } from "./ytUI.js";
+import { audioText } from '../features/audioLocale.js';
 import { t } from 'i18next';
 
 function applyPatches() {
     if (!window._yttv) return setTimeout(applyPatches, 250);
-    if (!document.querySelector('video')) return setTimeout(applyPatches, 250);
-    const methods = Object.keys(window._yttv).filter(key => {
+    const method = Object.keys(window._yttv).find(key => {
         return typeof window._yttv[key] === 'function' && window._yttv[key].toString().includes('TRANSPORT_CONTROLS_BUTTON_TYPE_FEATURED_ACTION');
     });
 
-    if (methods.length === 0) {
+    if (!method) {
         setTimeout(applyPatches, 250);
         return;
     }
 
-    const origMethod = window._yttv[methods[0]];
+    const origMethod = window._yttv[method];
+    // Parse once when installing the patch, before constructing any watch UI.
+    // Repeating this AST walk in every player constructor blocks first paint.
+    let functions;
+    try { functions = extractAssignedFunctions(origMethod.toString()); }
+    catch (error) { console.warn('[Player UI] Unsupported constructor', error); return; }
+    const methodName = predicate => functions.find(predicate)?.left?.split('.')[1];
+    const isClass = /^class\s/.test(origMethod.toString());
+    const settingActionGroup = methodName(func => func.rhs.includes('TRANSPORT_CONTROLS_BUTTON_TYPE_PLAYBACK_SETTINGS'));
+    const engagementActionButton = methodName(func => func.rhs.includes('props.data.engagementActions'));
+    const previousButtonName = methodName(func => func.rhs.indexOf('skipPreviousButton') > func.rhs.indexOf('skipNextButton')
+        && func.rhs.includes('skipNextButton'));
+    const nextButtonName = methodName(func => func.rhs.indexOf('skipNextButton') > func.rhs.indexOf('skipPreviousButton')
+        && func.rhs.includes('skipPreviousButton'));
 
     function YtlrPlayerActionsContainer() {
         const args = Array.prototype.slice.call(arguments);
-        const isClass = /^class\s/.test(origMethod.toString());
 
         function constructAsNew(ctor, argsList) {
             if (typeof Reflect !== 'undefined' && typeof Reflect.construct === 'function') {
@@ -43,8 +55,6 @@ function applyPatches() {
             inst = this;
         }
 
-        const functions = extractAssignedFunctions(origMethod.toString());
-
         const pipCommand = {
             "type": "TRANSPORT_CONTROLS_BUTTON_TYPE_PIP",
             "button": {
@@ -61,10 +71,6 @@ function applyPatches() {
             }
         }
 
-        const settingActionGroup = functions.find(func => {
-            return func.rhs.includes('TRANSPORT_CONTROLS_BUTTON_TYPE_PLAYBACK_SETTINGS');
-        }).left.split('.')[1];
-
         if (!settingActionGroup) return inst;
 
         const origSettingActionGroup = inst[settingActionGroup];
@@ -77,55 +83,32 @@ function applyPatches() {
             };
         }
 
-        const previousButtonName = functions.find(func => {
-            if (func.rhs.includes('skipNextButton')) {
-                const skipNextButtonIndex = func.rhs.indexOf('skipNextButton');
-                const skipPreviousButtonIndex = func.rhs.indexOf('skipPreviousButton');
-                if (skipPreviousButtonIndex > skipNextButtonIndex) {
-                    return true;
-                }
-            }
-        }).left.split('.')[1];
-
-        const nextButtonName = functions.find(func => {
-            if (func.rhs.includes('skipPreviousButton')) {
-                const skipNextButtonIndex = func.rhs.indexOf('skipNextButton');
-                const skipPreviousButtonIndex = func.rhs.indexOf('skipPreviousButton');
-                if (skipNextButtonIndex > skipPreviousButtonIndex) {
-                    return true;
-                }
-            }
-        }).left.split('.')[1];
-
-        const engagementActionButton = functions.find(func => func.rhs.includes('props.data.engagementActions')).left.split('.')[1];
-
-        if (engagementActionButton && configRead('enableSpeedControlsButton')) {
-            const origEngagementActionButton = inst[engagementActionButton];
+        if (engagementActionButton) {
+            const originalActions = inst[engagementActionButton];
             inst[engagementActionButton] = function () {
-                const res = origEngagementActionButton.apply(this, arguments);
-                res.find(item => item.type === 'TRANSPORT_CONTROLS_BUTTON_TYPE_SPEED') || res.push({
-                    type: 'TRANSPORT_CONTROLS_BUTTON_TYPE_SPEED',
-                    button: {
-                        buttonRenderer: ButtonRenderer(
-                            false,
-                            t('player.playbackSpeed.button'),
-                            'SLOW_MOTION_VIDEO',
-                            {
-                                customAction:
-                                {
-                                    action: 'TT_SPEED_SETTINGS_SHOW',
-                                }
-                            }
-                        )
-                    }
-                });
+                let res = originalActions.apply(this, arguments);
+                if (configRead('audioUnifiedFlow')) {
+                    res = res.filter(item => !/AUDIO_TRACK|AUDIO_LANGUAGE/.test(item.type || ''));
+                }
+                const add = (type, title, icon, action) => {
+                    const button = { type, button: { buttonRenderer: ButtonRenderer(false, title, icon, { customAction: { action } }) } };
+                    const index = res.findIndex(item => item.type === type);
+                    if (index < 0) res.push(button); else res[index] = button;
+                };
+                if (configRead('enableSpeedControlsButton')) {
+                    add('TRANSPORT_CONTROLS_BUTTON_TYPE_SPEED',
+                        t('player.playbackSpeed.button') + ' · ' + Number(configRead('videoSpeed')) + 'x',
+                        'SLOW_MOTION_VIDEO', 'TT_SPEED_SETTINGS_SHOW');
+                }
+                if (configRead('audioUnifiedFlow')) {
+                    add('TRANSPORT_CONTROLS_BUTTON_TYPE_AUDIO', audioText('audioAndTranslation'),
+                        'AUDIO_TRACK', 'TT_VOT_SETTINGS_SHOW');
+                }
                 return res;
-            }
+            };
         }
 
-        // Audio has one player entry: playback settings. Do not add a duplicate transport button.
-
-        if (!configRead('enableSuperThanksButton')) {
+        if (engagementActionButton && !configRead('enableSuperThanksButton')) {
             const origEngagementActionButton = inst[engagementActionButton];
             inst[engagementActionButton] = function () {
                 const res = origEngagementActionButton.apply(this, arguments);
@@ -135,7 +118,7 @@ function applyPatches() {
             }
         }
         
-        if (!configRead('enableAIAskButton')) {
+        if (engagementActionButton && !configRead('enableAIAskButton')) {
             const origEngagementActionButton = inst[engagementActionButton];
             inst[engagementActionButton] = function () {
                 const res = origEngagementActionButton.apply(this, arguments);
@@ -180,7 +163,7 @@ function applyPatches() {
 
     if (configRead('enablePatchingVideoPlayer')) {
         YtlrPlayerActionsContainer.prototype = origMethod.prototype;
-        window._yttv[methods[0]] = YtlrPlayerActionsContainer;
+        window._yttv[method] = YtlrPlayerActionsContainer;
     }
 }
 

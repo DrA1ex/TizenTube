@@ -49,34 +49,29 @@ export function patchResolveCommand() {
             const patchedResolve = function (cmd, _) {
                 if (cmd.setClientSettingEndpoint) {
                     // Command to change client settings. Use TizenTube configuration to change settings.
-                    for (const settings of cmd.setClientSettingEndpoint.settingDatas) {
-                        if (!settings.clientSettingEnum.item.includes('_')) {
-                            for (const setting of cmd.setClientSettingEndpoint.settingDatas) {
-                                const valName = Object.keys(setting).find(key => key.includes('Value'));
-                                const value = valName === 'intValue' ? Number(setting[valName]) : setting[valName];
-                                if (valName === 'arrayValue') {
-                                    const arr = configRead(setting.clientSettingEnum.item);
-                                    if (arr.includes(value)) {
-                                        arr.splice(arr.indexOf(value), 1);
-                                    } else {
-                                        arr.push(value);
-                                    }
-                                    configWrite(setting.clientSettingEnum.item, arr);
-                                } else configWrite(setting.clientSettingEnum.item, value);
-                            }
-                        } else if (settings.clientSettingEnum.item === 'I18N_LANGUAGE') {
-                            const lang = settings.stringValue;
+                    const nativeSettings = [];
+                    for (const setting of cmd.setClientSettingEndpoint.settingDatas) {
+                        const key = setting.clientSettingEnum.item;
+                        if (!key.includes('_')) {
+                            const valueName = Object.keys(setting).find(name => name.endsWith('Value'));
+                            const value = valueName === 'intValue' ? Number(setting[valueName]) : setting[valueName];
+                            if (valueName === 'arrayValue') {
+                                const values = [...configRead(key)];
+                                const index = values.indexOf(value);
+                                if (index < 0) values.push(value); else values.splice(index, 1);
+                                configWrite(key, values);
+                            } else configWrite(key, value);
+                        } else if (key === 'I18N_LANGUAGE') {
                             const date = new Date();
                             date.setFullYear(date.getFullYear() + 10);
-                            document.cookie = `PREF=hl=${lang}; expires=${date.toUTCString()};`;
-                            resolveCommand({
-                                signalAction: {
-                                    signal: 'RELOAD_PAGE'
-                                }
-                            });
-                            return true;
-                        }
+                            document.cookie = `PREF=hl=${setting.stringValue}; expires=${date.toUTCString()};`;
+                            resolveCommand({ signalAction: { signal: 'RELOAD_PAGE' } });
+                        } else nativeSettings.push(setting);
                     }
+                    if (!nativeSettings.length) return true;
+                    return ogResolve.call(this, { ...cmd, setClientSettingEndpoint: {
+                        ...cmd.setClientSettingEndpoint, settingDatas: nativeSettings
+                    } }, _);
                 } else if (cmd.customAction) {
                     customAction(cmd.customAction.action, cmd.customAction.parameters);
                     return true;
@@ -94,7 +89,7 @@ export function patchResolveCommand() {
                     const items = cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items;
                     for (const item of items) {
                         if (item?.compactLinkRenderer?.icon?.iconType === 'SLOW_MOTION_VIDEO') {
-                            item.compactLinkRenderer.subtitle && (item.compactLinkRenderer.subtitle.simpleText = t('player.withTizenTube'));
+                            item.compactLinkRenderer.subtitle = { simpleText: Number(configRead('videoSpeed')) + 'x' };
                             item.compactLinkRenderer.serviceEndpoint = {
                                 clickTrackingParams: "null",
                                 signalAction: {
@@ -108,18 +103,7 @@ export function patchResolveCommand() {
                     }
 
                     if (configRead('audioUnifiedFlow')) {
-                        // Some TV clients use a speaker icon, not AUDIO_TRACK; match the observed title too.
-                        const unifiedAudioItems = unifyPlayerAudioEntry(items,
-                            buttonItem(
-                                { title: audioText('audioAndTranslation') },
-                                { icon: 'VOLUME_UP', secondaryIcon: 'CHEVRON_RIGHT' }, [
-                                {
-                                    customAction: {
-                                        action: 'TT_VOT_SETTINGS_SHOW'
-                                    }
-                                }
-                            ])
-                        );
+                        const unifiedAudioItems = unifyPlayerAudioEntry(items);
                         items.splice(0, items.length, ...unifiedAudioItems);
                     }
 
@@ -249,7 +233,7 @@ function customAction(action, parameters) {
         case 'TT_VOT_SETTINGS_SHOW':
             showAudioMenu();
             break;
-        case 'AUDIO_CHOOSE': case 'AUDIO_READY': case 'AUDIO_CANCEL': case 'AUDIO_TARGET':
+        case 'AUDIO_SESSION': case 'AUDIO_SAVE_DEFAULT': case 'AUDIO_CHOOSE': case 'AUDIO_READY': case 'AUDIO_CANCEL': case 'AUDIO_TARGET':
         case 'AUDIO_PREFERENCES': case 'AUDIO_LANGUAGE': case 'AUDIO_LOGIN': case 'AUDIO_TOKEN':
         case 'AUDIO_LOGOUT': case 'AUDIO_REFRESH': case 'AUDIO_MENU': case 'AUDIO_VOLUMES':
             audioMenuAction(action, parameters);

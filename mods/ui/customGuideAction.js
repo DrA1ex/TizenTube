@@ -1,21 +1,20 @@
-import { audioText } from '../features/audioLocale.js';
 import { configChangeEmitter, configRead, configWrite } from "../config.js";
 import getCommandExecutor from "./customCommandExecution.js";
 import { GuideEntryRenderer } from "./ytUI.js";
-import { t } from "i18next";
 
 const origParse = JSON.parse;
 JSON.parse = function () {
     const r = origParse.apply(this, arguments);
-    const guideSection = r.items?.[0]?.guideSectionRenderer;
+    const guideSection = r?.items?.[0]?.guideSectionRenderer;
+    if (!Array.isArray(guideSection?.items)) return r;
     const order = configRead('sidebarContentsOrder');
     if (guideSection && Array.isArray(order)) {
         let orderChanged = false;
         for (const item of guideSection.items) {
-            const itemOrder = item.guideEntryRenderer.navigationEndpoint?.browseEndpoint?.browseId
-                || (item.guideEntryRenderer.navigationEndpoint?.searchEndpoint && 'search');
+            const itemOrder = item?.guideEntryRenderer?.navigationEndpoint?.browseEndpoint?.browseId
+                || (item?.guideEntryRenderer?.navigationEndpoint?.searchEndpoint && 'search');
             if (itemOrder && !order.some(orderItem =>
-                (typeof orderItem === 'object' ? orderItem.browseId : orderItem) === itemOrder)) {
+                (typeof orderItem === 'object' ? orderItem?.browseId : orderItem) === itemOrder)) {
                 order.push(itemOrder);
                 orderChanged = true;
             }
@@ -24,13 +23,13 @@ JSON.parse = function () {
     }
     if (configRead('sidebarContentsOrder')?.length === 0) {
        // Add all of the items in the sidebar to the sidebarContentsOrder
-        if (r.items && Array.isArray(r.items) && r.items[0].guideSectionRenderer) {
+        if (guideSection) {
             const order = [];
             for (const item of r.items[0].guideSectionRenderer.items) {
-                const browseId = item.guideEntryRenderer.navigationEndpoint?.browseEndpoint?.browseId;
+                const browseId = item?.guideEntryRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
                 if (browseId) {
                     order.push(browseId);
-                } else if (item.guideEntryRenderer.navigationEndpoint?.searchEndpoint) {
+                } else if (item?.guideEntryRenderer?.navigationEndpoint?.searchEndpoint) {
                     order.push('search');
                 }
             }
@@ -39,7 +38,7 @@ JSON.parse = function () {
     } else {
         // Reorder the items based on the sidebarContentsOrder config key
 
-        if (r.items && Array.isArray(r.items) && r.items[0].guideSectionRenderer) {
+        if (guideSection) {
             const order = configRead('sidebarContentsOrder');
             const items = r.items[0].guideSectionRenderer.items;
             const copiedItems = JSON.parse(JSON.stringify(items));
@@ -61,24 +60,27 @@ JSON.parse = function () {
 
             const orderedItems = [];
             for (const orderItem of order) {
-                const browseId = typeof orderItem === 'object' ? orderItem.browseId : orderItem;
+                const browseId = typeof orderItem === 'object' ? orderItem?.browseId : orderItem;
                 const index = copiedItems.findIndex(item => {
-                    const itemBrowseId = item.guideEntryRenderer.navigationEndpoint?.browseEndpoint?.browseId;
-                    return itemBrowseId === browseId || (browseId === 'search' && item.guideEntryRenderer.navigationEndpoint?.searchEndpoint);
+                    const itemBrowseId = item?.guideEntryRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
+                    return itemBrowseId === browseId || (browseId === 'search' && item?.guideEntryRenderer?.navigationEndpoint?.searchEndpoint);
                 });
                 if (index !== -1) {
                     orderedItems.push(copiedItems[index]);
+                    copiedItems.splice(index, 1);
                 }
             }
-            r.items[0].guideSectionRenderer.items = orderedItems;
+            // Keep new or non-navigation rows when the client's layout changes.
+            r.items[0].guideSectionRenderer.items = orderedItems.concat(copiedItems);
         }
     }
 
     const disabledSidebarContents = configRead('disabledSidebarContents');
     const disableChannelsOnSidebar = configRead('disableChannelsOnSidebar');
-    if (r.items && Array.isArray(r.items) && r.items[0].guideSectionRenderer) {
+    if (guideSection) {
         for (let i = 0; i < r.items.length; i++) {
-            const section = r.items[i].guideSectionRenderer;
+            const section = r.items[i]?.guideSectionRenderer;
+            if (!Array.isArray(section?.items)) continue;
             section.originalItems = section.items.slice();
             for (let j = 0; j < section.items.length; j++) {
                 const item = section.items[j].guideEntryRenderer;
@@ -92,25 +94,6 @@ JSON.parse = function () {
                     j--;
                 }
             }
-        }
-    }
-
-    // Keep VOT directly reachable with a TV remote even when YouTube changes
-    // the structure of its settings page.
-    if (guideSection) {
-        const hasVotEntry = guideSection.items.some(item =>
-            item.guideEntryRenderer?.navigationEndpoint?.customAction?.action === 'TT_VOT_SETTINGS_SHOW'
-        );
-        if (!hasVotEntry) {
-            guideSection.items.push(GuideEntryRenderer(
-                audioText('audioAndTranslation'),
-                {
-                    customAction: {
-                        action: 'TT_VOT_SETTINGS_SHOW'
-                    }
-                },
-                'SUBTITLES'
-            ));
         }
     }
 

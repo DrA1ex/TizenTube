@@ -104,7 +104,10 @@ function Modal(header, content, id, update) {
 }
 
 function showModal(header, content, id, update) {
-    const modalCmd = Modal(header, content, id, update);
+    // Some TV clients reuse the old row renderers for an in-place update.
+    // Replace the active audio popup to repaint checks and preserve its parent.
+    if (update === 'replace') resolveCommand({ signalAction: { signal: 'POPUP_BACK' } });
+    const modalCmd = Modal(header, content, id, update === 'replace' ? false : update);
 
     resolveCommand(modalCmd);
 }

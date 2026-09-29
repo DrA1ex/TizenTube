@@ -73,7 +73,7 @@ export class AudioFlowController {
         }
         const inventory = this.d.inventory();
         if (!this.requested && !this.override && prefs.auto && !media.paused) {
-            if (inventory.originalLanguage === prefs.target) {
+            if (prefs.provider === 'original' || inventory.originalLanguage === prefs.target) {
                 await this.select({ provider: 'original' }, true);
             } else if (inventory.originalLanguage && prefs.translateDifferent !== false
                 && (prefs.provider === 'youtube' || supportsTranslation(inventory.originalLanguage, prefs.target))) {
@@ -153,6 +153,10 @@ export class AudioFlowController {
         this.cancelPending();
         this.abort = new AbortController();
         this.ended = false;
+        if (choice.trackId) {
+            const track = this.d.inventory().tracks.find(item => item.id === choice.trackId);
+            if (track?.language) this.target = track.language;
+        }
         this.requested = { ...choice };
         this.override = !automatic;
         this.automatic = automatic;
@@ -254,7 +258,8 @@ export class AudioFlowController {
     async setTarget(language) {
         if (this.d.videoId() !== this.id) { this.leave(); this.id = this.d.videoId(); }
         this.target = language;
-        const choice = this.requested || { provider: this.d.preferences().provider };
+        const choice = this.requested?.provider && this.requested.provider !== 'current'
+            ? this.requested : { provider: this.d.preferences().provider };
         // A concrete YouTube track ID belongs to the old language; reselect by language.
         await this.select({ provider: choice.provider });
     }

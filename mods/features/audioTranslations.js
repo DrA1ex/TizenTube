@@ -1,5 +1,12 @@
 // GX1 audio and VOT interface strings. English is the fallback language.
 export const AUDIO_TRANSLATIONS = {
+    "enableTranslation": { "en": "Enable translation", "ru": "Включить перевод" },
+    "selectionScope": { "en": "Use this selection", "ru": "Применить выбор" },
+    "thisVideoOnly": { "en": "For this video", "ru": "Для этого видео" },
+    "saveAsDefault": { "en": "Save as default", "ru": "Сохранить по умолчанию" },
+    "defaultSaved": { "en": "Track and language saved for future videos", "ru": "Дорожка и язык сохранены для следующих видео" },
+    "playbackAndVolume": { "en": "Playback and volume", "ru": "Воспроизведение и громкость" },
+
     "audioAndTranslation": {
         "en": "Audio and translation",
         "ru": "Аудио и перевод"

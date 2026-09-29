@@ -876,6 +876,7 @@ export default function modernUI(update, parameters) {
 }
 
 export function optionShow(parameters, update) {
+    if (update && parameters.menuId?.startsWith('tt-audio')) update = 'replace';
     if (update === 'customUI') {
         const option = parameters.options;
         showModal(

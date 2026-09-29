@@ -27,6 +27,9 @@ class PreferredQualityHandler {
     init() {
         this.#pollForPlayer();
         this.#setupConfigListener();
+        document.addEventListener('loadedmetadata', event => {
+            if (event.target === document.querySelector('video')) this.#applyQuality(false, true);
+        }, true);
     }
 
     #pollForPlayer() {
@@ -58,10 +61,10 @@ class PreferredQualityHandler {
         this.#applyQuality();
     };
 
-    #applyQuality(configChanged = false) {
+    #applyQuality(configChanged = false, starting = false) {
         const preferredQuality = configRead(CONFIG_KEYS.QUALITY);
         try {
-            const applied = this.#quality.apply(this.#player, preferredQuality, { configChanged });
+            const applied = this.#quality.apply(this.#player, preferredQuality, { configChanged, starting });
             clearTimeout(this.#retryTimeout);
             if (!applied && preferredQuality && preferredQuality !== 'auto') {
                 let playing = false;

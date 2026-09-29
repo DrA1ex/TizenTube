@@ -1,4 +1,4 @@
-import { restoreLegacyQualityPreference } from './playbackQualityGuard.js';
+import { restoreLegacyQualityPreference, guardPlaybackQuality, observeQualitySelections, prepareNewVideoQuality } from './playbackQualityGuard.js';
 import { installBufferedWaitingFilter } from './bufferedWaitingFilter.js';
 
 const MIN_SPEED = 0.25;
@@ -24,7 +24,6 @@ function apiPlaybackRate(player) {
     return getter?.call(player);
 }
 
-
 function isCobalt(documentRef) {
     const windowRef = documentRef?.defaultView || globalThis.window;
     return Boolean(windowRef?.__votBridgeKey || /Cobalt\//i.test(windowRef?.navigator?.userAgent || ''));
@@ -46,8 +45,7 @@ export function applyPlaybackSpeed(value, targets = {}) {
     const cobalt = targets.cobalt ?? isCobalt(documentRef);
 
     // Keep the loader's media ratechange path without YouTube's blanket HFR cap.
-    // Leave stream adaptation to the player; quality-range writes can restart
-    // playback and interrupt translation, especially around seeks.
+    // The telemetry guard separately handles confirmed playback failures.
     if (cobalt) {
         if (!video) return { applied: false, via: 'unavailable', speed };
         try {
@@ -90,7 +88,7 @@ export function applyPlaybackSpeed(value, targets = {}) {
     return { applied: false, via: 'unavailable', speed };
 }
 
-export function installPlaybackSpeed(documentRef, readSpeed) {
+export function installPlaybackSpeed(documentRef, readSpeed, { resetSpeed } = {}) {
     const apply = () => applyPlaybackSpeed(readSpeed(), { documentRef });
     const stopWaitingFilter = isCobalt(documentRef)
         ? installBufferedWaitingFilter(documentRef, readSpeed) : null;
@@ -110,10 +108,22 @@ export function installPlaybackSpeed(documentRef, readSpeed) {
     // The timer restores the configured speed if a reused video node resets it.
     const windowRef = documentRef.defaultView;
     const timer = windowRef?.setInterval?.(() => {
-        if (isCobalt(documentRef) && documentRef.querySelector('video')) apply();
+        if (!isCobalt(documentRef)) return;
+        const video = documentRef.querySelector('video');
+        const player = documentRef.querySelector('.html5-video-player');
+        if (!video || !player) return;
+        observeQualitySelections(player, resetSpeed);
+        apply();
+        guardPlaybackQuality(player, video, Number(readSpeed()), Date.now(), { hidden: documentRef.hidden });
     }, 500);
 
+    const onNavigation = () => {
+        const id = windowRef?.location?.hash?.match(/[?&]v=([^&#]+)/)?.[1];
+        prepareNewVideoQuality(documentRef.querySelector('.html5-video-player'), id);
+    };
+    windowRef?.addEventListener?.('hashchange', onNavigation);
     return () => {
+        windowRef?.removeEventListener?.('hashchange', onNavigation);
         stopWaitingFilter?.();
         for (const type of ['canplay', 'ratechange', 'loadedmetadata',
             'waiting', 'stalled', 'playing', 'pause', 'seeking', 'seeked']) {

@@ -1,4 +1,5 @@
 import { configRead } from '../config.js';
+import { preferVideoCodec } from './preferredQualityPolicy.js';
 import Chapters from '../ui/chapters.js';
 import resolveCommand from '../resolveCommand.js';
 import { timelyAction, longPressData, MenuServiceItemRenderer, ShelfRenderer, TileRenderer, ButtonRenderer } from '../ui/ytUI.js';
@@ -45,14 +46,7 @@ JSON.parse = function () {
     }
 
     if (r?.streamingData?.adaptiveFormats && configRead('preferredVideoCodec') !== 'any') {
-      const preferredCodec = configRead('preferredVideoCodec');
-      const hasPreferredCodec = r.streamingData.adaptiveFormats.find(format => format.mimeType.includes(preferredCodec));
-      if (hasPreferredCodec) {
-        r.streamingData.adaptiveFormats = r.streamingData.adaptiveFormats.filter(format => {
-          if (format.mimeType.startsWith('audio/')) return true;
-          return format.mimeType.includes(preferredCodec);
-        });
-      }
+      r.streamingData.adaptiveFormats = preferVideoCodec(r.streamingData.adaptiveFormats, configRead('preferredVideoCodec'));
     }
 
     // Drop "masthead" ad from home screen

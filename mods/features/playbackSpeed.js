@@ -1,4 +1,3 @@
-import { restoreLegacyQualityPreference, guardPlaybackQuality, observeQualitySelections, prepareNewVideoQuality } from './playbackQualityGuard.js';
 import { installBufferedWaitingFilter } from './bufferedWaitingFilter.js';
 
 const MIN_SPEED = 0.25;
@@ -44,8 +43,9 @@ export function applyPlaybackSpeed(value, targets = {}) {
     const video = targets.video || documentRef?.querySelector?.('video');
     const cobalt = targets.cobalt ?? isCobalt(documentRef);
 
-    // Keep the loader's media ratechange path without YouTube's blanket HFR cap.
-    // The telemetry guard separately handles confirmed playback failures.
+    // Keep the loader's media ratechange path without YouTube's blanket HFR cap
+    // (1080p for any accelerated HFR video). The quality controller applies
+    // the actual decoder limit for the current speed instead.
     if (cobalt) {
         if (!video) return { applied: false, via: 'unavailable', speed };
         try {
@@ -55,7 +55,6 @@ export function applyPlaybackSpeed(value, targets = {}) {
                 player.setPlaybackRate(1);
             }
 
-            restoreLegacyQualityPreference(player, video);
             if (video.playbackRate !== speed) video.playbackRate = speed;
             return { applied: true, via: 'cobalt-media', speed };
         } catch (error) {
@@ -88,7 +87,7 @@ export function applyPlaybackSpeed(value, targets = {}) {
     return { applied: false, via: 'unavailable', speed };
 }
 
-export function installPlaybackSpeed(documentRef, readSpeed, { resetSpeed } = {}) {
+export function installPlaybackSpeed(documentRef, readSpeed) {
     const apply = () => applyPlaybackSpeed(readSpeed(), { documentRef });
     const stopWaitingFilter = isCobalt(documentRef)
         ? installBufferedWaitingFilter(documentRef, readSpeed) : null;
@@ -109,21 +108,10 @@ export function installPlaybackSpeed(documentRef, readSpeed, { resetSpeed } = {}
     const windowRef = documentRef.defaultView;
     const timer = windowRef?.setInterval?.(() => {
         if (!isCobalt(documentRef)) return;
-        const video = documentRef.querySelector('video');
-        const player = documentRef.querySelector('.html5-video-player');
-        if (!video || !player) return;
-        observeQualitySelections(player, resetSpeed);
-        apply();
-        guardPlaybackQuality(player, video, Number(readSpeed()), Date.now(), { hidden: documentRef.hidden });
+        if (documentRef.querySelector('video')) apply();
     }, 500);
 
-    const onNavigation = () => {
-        const id = windowRef?.location?.hash?.match(/[?&]v=([^&#]+)/)?.[1];
-        prepareNewVideoQuality(documentRef.querySelector('.html5-video-player'), id);
-    };
-    windowRef?.addEventListener?.('hashchange', onNavigation);
     return () => {
-        windowRef?.removeEventListener?.('hashchange', onNavigation);
         stopWaitingFilter?.();
         for (const type of ['canplay', 'ratechange', 'loadedmetadata',
             'waiting', 'stalled', 'playing', 'pause', 'seeking', 'seeked']) {

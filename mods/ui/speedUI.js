@@ -3,7 +3,7 @@ import { installPlaybackSpeed } from '../features/playbackSpeed.js';
 import { showModal, buttonItem, overlayPanelItemListRenderer } from './ytUI.js';
 import { t } from 'i18next';
 
-installPlaybackSpeed(document, () => configRead('videoSpeed'), { resetSpeed: speed => configWrite('videoSpeed', speed) });
+installPlaybackSpeed(document, () => configRead('videoSpeed'));
 execute_once_dom_loaded_speed();
 
 function execute_once_dom_loaded_speed() {

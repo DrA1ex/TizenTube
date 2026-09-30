@@ -14,6 +14,9 @@ import { showAudioMenu, audioMenuAction } from './ui/audioMenu.js';
 import { unifyPlayerAudioEntry } from './ui/playerAudioEntry.js';
 import { applyPlaybackSpeed } from './features/playbackSpeed.js';
 
+// The stock playback speed entry was renamed between TV client versions.
+export const SPEED_ICONS = ['SLOW_MOTION_VIDEO', 'SPEEDOMETER'];
+
 export default function resolveCommand(cmd, _) {
     // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
     // Because the client might change, we should find it first.
@@ -88,7 +91,7 @@ export function patchResolveCommand() {
                     // Patch the playback settings popup to use TizenTube speed settings
                     const items = cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items;
                     for (const item of items) {
-                        if (item?.compactLinkRenderer?.icon?.iconType === 'SLOW_MOTION_VIDEO') {
+                        if (SPEED_ICONS.includes(item?.compactLinkRenderer?.icon?.iconType)) {
                             item.compactLinkRenderer.subtitle = { simpleText: Number(configRead('videoSpeed')) + 'x' };
                             item.compactLinkRenderer.serviceEndpoint = {
                                 clickTrackingParams: "null",

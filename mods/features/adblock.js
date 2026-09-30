@@ -1,5 +1,6 @@
 import { configRead } from '../config.js';
 import { preferVideoCodec } from './preferredQualityPolicy.js';
+import { createNodeHealth, probeNode } from './cdnHealth.js';
 import Chapters from '../ui/chapters.js';
 import resolveCommand from '../resolveCommand.js';
 import { timelyAction, longPressData, MenuServiceItemRenderer, ShelfRenderer, TileRenderer, ButtonRenderer } from '../ui/ytUI.js';
@@ -15,6 +16,10 @@ import { t } from 'i18next';
  *
  * Seems like for now dropping just the adPlacements is enough for YouTube TV
  */
+const nodeHealth = createNodeHealth({
+  storage: (() => { try { return window.localStorage; } catch (_) { return null; } })(),
+  probe: probeNode
+});
 const origParse = JSON.parse;
 JSON.parse = function () {
   const r = origParse.apply(this, arguments);
@@ -44,6 +49,8 @@ JSON.parse = function () {
     if (r.paidContentOverlay && !configRead('enablePaidPromotionOverlay')) {
       r.paidContentOverlay = null;
     }
+
+    if (r?.streamingData) nodeHealth.apply(r.streamingData);
 
     if (r?.streamingData?.adaptiveFormats && configRead('preferredVideoCodec') !== 'any') {
       r.streamingData.adaptiveFormats = preferVideoCodec(r.streamingData.adaptiveFormats, configRead('preferredVideoCodec'));
